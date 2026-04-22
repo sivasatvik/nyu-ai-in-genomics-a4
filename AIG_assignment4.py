@@ -75,6 +75,7 @@ FIG_DIR = Path("figures")
 df = pd.read_parquet(DATA_DIR / "tf_multispecies_sequences_large.parquet")
 print(f"Dataset shape: {df.shape}")
 print(df.head())
+print(df.columns.tolist())
 
 # %%
 # Load split indices from Assignment 3
@@ -93,12 +94,10 @@ print(f"Protein embeddings shape: {protein_embeddings.shape}")
 
 # %%
 # Extract Split 1 indices (human train → mouse/fly zero-shot transfer)
-# Adjust key names to match how you saved them in Assignment 3
-split1 = split_indices["split1"]  # or split_indices[0], etc.
 
-train_idx = split1["train"]
-val_idx   = split1["val"]
-test_idx  = split1["test"]
+train_idx = split_indices["split1_train"]
+val_idx   = split_indices["split1_val"]
+test_idx  = split_indices["split1_test"]
 
 print(f"Train: {len(train_idx)} | Val: {len(val_idx)} | Test: {len(test_idx)}")
 
