@@ -156,8 +156,8 @@ DNA_LORA_MAX_LEN     = 512
 PROTEIN_LORA_MAX_LEN = 512
 
 # Model identifiers
-NT_MODEL_NAME = "InstaDeepAI/nucleotide-transformer-500m-human-ref"
-NT_MODEL_LOCAL = Path("models/nucleotide-transformer-500m-human-ref")
+NT_MODEL_NAME = "InstaDeepAI/nucleotide-transformer-v2-500m-human-ref"
+NT_MODEL_LOCAL = Path("models/nucleotide-transformer-v2-500m-human-ref")
 NT_MODEL_ID    = str(NT_MODEL_LOCAL) if NT_MODEL_LOCAL.exists() else NT_MODEL_NAME
 ESM_MODEL_NAME = "facebook/esm2_t12_35M_UR50D"
 ESM_MODEL_LOCAL = Path("models/esm2_t12_35M_UR50D")
