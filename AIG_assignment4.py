@@ -102,8 +102,8 @@ test_idx  = split_indices["split1_test"]
 print(f"Train: {len(train_idx)} | Val: {len(val_idx)} | Test: {len(test_idx)}")
 
 # %%
-# Build label arrays
-labels = df["label"].values  # adjust column name if needed
+# Build is_tf arrays
+labels = df["is_tf"].values
 
 y_train = labels[train_idx]
 y_val   = labels[val_idx]
@@ -188,7 +188,7 @@ if RUN_NT_LORA:
     # ── Tokenize sequences ──────────────────────────────────────────────────────
     nt_tokenizer = AutoTokenizer.from_pretrained(NT_MODEL_ID)
 
-    cds_sequences = df["cds_sequence"].values  # adjust column name if needed
+    cds_sequences = df["cds_seq"].values  # adjust column name if needed
 
     def tokenize_dna(seqs, tokenizer, max_len):
         return tokenizer(
@@ -328,7 +328,7 @@ if RUN_ESM2_LORA:
     # ── Tokenize protein sequences ───────────────────────────────────────────────
     esm2_tokenizer = AutoTokenizer.from_pretrained(ESM2_MODEL_ID)
 
-    protein_sequences = df["protein_sequence"].values  # adjust column name if needed
+    protein_sequences = df["protein_seq"].values  # adjust column name if needed
 
     def tokenize_protein(seqs, tokenizer, max_len):
         return tokenizer(
