@@ -121,8 +121,8 @@ print(f"Test class distribution:  {np.bincount(y_test)}")
 # %%
 # Download model snapshot from Hugging Face Hub
 from huggingface_hub import snapshot_download
-local_dir = "./models/nucleotide-transformer-500m-human-ref"
-snapshot_download(repo_id="InstaDeepAI/nucleotide-transformer-500m-multi-species", local_dir=local_dir)
+local_dir = "./models/nucleotide-transformer-v2-500m-human-ref"
+snapshot_download(repo_id="InstaDeepAI/nucleotide-transformer-v2-500m-human-ref", local_dir=local_dir)
 local_dir = "./models/esm2_t33_650M_UR50D"
 snapshot_download(repo_id="facebook/esm2_t33_650M_UR50D", local_dir=local_dir)
 
