@@ -22,7 +22,8 @@ plt.ioff()
 
 # Force line-buffered stdout so print statements appear immediately in sbatch /
 # Singularity logs rather than being flushed only at script exit.
-sys.stdout.reconfigure(line_buffering=True)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)
 
 import seaborn as sns
 from sklearn.metrics import (
@@ -46,7 +47,8 @@ SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
 torch.manual_seed(SEED)
-torch.cuda.manual_seed_all(SEED)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(SEED)
 
 # %% [markdown]
 # ---
@@ -70,6 +72,7 @@ import json
 
 DATA_DIR = Path("data")
 FIG_DIR = Path("figures")
+FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 # Load the TF dataset
 df = pd.read_parquet(DATA_DIR / "tf_multispecies_sequences_large.parquet")
@@ -958,15 +961,14 @@ for epoch in range(SAE_EPOCHS):
         print(f"  Epoch {epoch+1}/{SAE_EPOCHS} | Loss: {loss.item():.6f} "
               f"(MSE: {mse:.6f}, L1: {l1:.6f})")
 
-plt.figure(figsize=(8, 3))
-plt.plot(sae_losses)
-plt.xlabel("Epoch")
-plt.ylabel("Total Loss")
-plt.title("SAE Training Loss")
-plt.tight_layout()
+fig, ax = plt.subplots(figsize=(8, 3))
+ax.plot(sae_losses)
+ax.set_xlabel("Epoch")
+ax.set_ylabel("Total Loss")
+ax.set_title("SAE Training Loss")
+fig.tight_layout()
 fig_path = FIG_DIR / "sae_training_loss.png"
 fig.savefig(fig_path, dpi=300, bbox_inches="tight")
-plt.close(fig)
 print(f"[INFO] Saved figure: {fig_path}")
 
 # %%
