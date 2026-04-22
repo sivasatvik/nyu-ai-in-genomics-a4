@@ -124,10 +124,12 @@ print(f"Test class distribution:  {np.bincount(y_test)}")
 # %%
 # Download model snapshot from Hugging Face Hub
 from huggingface_hub import snapshot_download
-local_dir = "./models/nucleotide-transformer-v2-500m-human-ref"
-snapshot_download(repo_id="InstaDeepAI/nucleotide-transformer-v2-500m-human-ref", local_dir=local_dir)
+local_dir = "./models/nucleotide-transformer-500m-human-ref"
+if not Path(local_dir).exists():
+    snapshot_download(repo_id="InstaDeepAI/nucleotide-transformer-500m-human-ref", local_dir=local_dir)
 local_dir = "./models/esm2_t33_650M_UR50D"
-snapshot_download(repo_id="facebook/esm2_t33_650M_UR50D", local_dir=local_dir)
+if not Path(local_dir).exists():
+    snapshot_download(repo_id="facebook/esm2_t33_650M_UR50D", local_dir=local_dir)
 
 # %%
 from dataclasses import dataclass
@@ -159,8 +161,8 @@ DNA_LORA_MAX_LEN     = 512
 PROTEIN_LORA_MAX_LEN = 512
 
 # Model identifiers
-NT_MODEL_NAME = "InstaDeepAI/nucleotide-transformer-v2-500m-human-ref"
-NT_MODEL_LOCAL = Path("models/nucleotide-transformer-v2-500m-human-ref")
+NT_MODEL_NAME = "InstaDeepAI/nucleotide-transformer-500m-human-ref"
+NT_MODEL_LOCAL = Path("models/nucleotide-transformer-500m-human-ref")
 NT_MODEL_ID    = str(NT_MODEL_LOCAL) if NT_MODEL_LOCAL.exists() else NT_MODEL_NAME
 ESM_MODEL_NAME = "facebook/esm2_t12_35M_UR50D"
 ESM_MODEL_LOCAL = Path("models/esm2_t12_35M_UR50D")
