@@ -72,7 +72,7 @@ DATA_DIR = Path("data")
 FIG_DIR = Path("figures")
 
 # Load the TF dataset
-df = pd.read_parquet(DATA_DIR / "tf_multispecies_sequences.parquet")
+df = pd.read_parquet(DATA_DIR / "tf_multispecies_sequences_large.parquet")
 print(f"Dataset shape: {df.shape}")
 print(df.head())
 
