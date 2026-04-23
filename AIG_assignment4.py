@@ -799,6 +799,11 @@ esm2_model.eval()
 
 attention_maps = []  # list of (n_heads, seq_len, seq_len) arrays
 
+# Some backends/checkpoints may not return attention tensors even when
+# output_attentions=True. Handle this gracefully instead of crashing.
+if hasattr(esm2_model.backbone, "config") and hasattr(esm2_model.backbone.config, "attn_implementation"):
+    esm2_model.backbone.config.attn_implementation = "eager"
+
 with torch.no_grad():
     for i in range(len(high_conf_idx)):
         input_ids_i = selected_val_ids[i:i+1]
@@ -808,9 +813,14 @@ with torch.no_grad():
             input_ids=input_ids_i,
             attention_mask=att_mask_i,
             output_attentions=True,
+            return_dict=True,
+            use_cache=False,
         )
-        # outputs.attentions: tuple of (1, n_heads, seq_len, seq_len) per layer
-        last_layer_attn = outputs.attentions[-1]  # (1, n_heads, L, L)
+        attentions = getattr(outputs, "attentions", None)
+        if attentions is None or len(attentions) == 0:
+            print(f"[WARN] No attention tensors returned for sample {i}; skipping.")
+            continue
+        last_layer_attn = attentions[-1]  # (1, n_heads, L, L)
         attention_maps.append(last_layer_attn.squeeze(0).cpu().numpy())  # (n_heads, L, L)
 
 print(f"Attention map shapes: {[a.shape for a in attention_maps]}")
@@ -822,64 +832,71 @@ def select_top_heads(attn_matrix, n_top=4):
     variances = attn_matrix.reshape(attn_matrix.shape[0], -1).var(axis=1)
     return np.argsort(variances)[::-1][:n_top]
 
+if len(attention_maps) == 0:
+    print("[WARN] No attention maps available; skipping attention heatmap plot.")
+else:
+    fig, axes = plt.subplots(1, min(5, len(attention_maps)), figsize=(18, 4))
+    if len(attention_maps) == 1:
+        axes = [axes]
 
-fig, axes = plt.subplots(1, min(5, len(attention_maps)), figsize=(18, 4))
-if len(attention_maps) == 1:
-    axes = [axes]
+    for ax, attn in zip(axes, attention_maps[:5]):
+        top_heads  = select_top_heads(attn)
+        avg_attn   = attn[top_heads].mean(axis=0)  # (L, L)
+        seq_len    = min(avg_attn.shape[0], 64)  # show at most 64 positions
+        sns.heatmap(
+            avg_attn[:seq_len, :seq_len],
+            ax=ax, cmap="viridis",
+            cbar=False, xticklabels=False, yticklabels=False,
+        )
+        ax.set_xlabel("Key Position")
+        ax.set_ylabel("Query Position")
 
-for ax, attn in zip(axes, attention_maps[:5]):
-    top_heads  = select_top_heads(attn)
-    avg_attn   = attn[top_heads].mean(axis=0)  # (L, L)
-    seq_len    = min(avg_attn.shape[0], 64)  # show at most 64 positions
-    sns.heatmap(
-        avg_attn[:seq_len, :seq_len],
-        ax=ax, cmap="viridis",
-        cbar=False, xticklabels=False, yticklabels=False,
-    )
-    ax.set_xlabel("Key Position")
-    ax.set_ylabel("Query Position")
-
-plt.suptitle("Attention Weights — Last Layer (avg top-4 heads)", fontsize=13)
-plt.tight_layout()
-fig_path = FIG_DIR / "attention_weights.png"
-fig.savefig(fig_path, dpi=300, bbox_inches="tight")
-plt.close(fig)
-print(f"[INFO] Saved figure: {fig_path}")
+    plt.suptitle("Attention Weights — Last Layer (avg top-4 heads)", fontsize=13)
+    plt.tight_layout()
+    fig_path = FIG_DIR / "attention_weights.png"
+    fig.savefig(str(fig_path), dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[INFO] Saved figure: {fig_path}")
 
 # %%
 # ── Compare attention rollout vs IG attributions ────────────────────────────
-fig, axes = plt.subplots(2, min(5, len(all_attributions)),
-                         figsize=(16, 5))
+if len(attention_maps) == 0:
+    print("[WARN] Skipping IG-vs-attention comparison because no attention maps were returned.")
+else:
+    n_compare = min(5, len(all_attributions), len(attention_maps))
+    fig, axes = plt.subplots(2, n_compare, figsize=(16, 5))
+    if n_compare == 1:
+        axes = np.array(axes).reshape(2, 1)
 
-for col, (attrs, attn) in enumerate(zip(all_attributions[:5], attention_maps[:5])):
-    # IG attribution (row 0)
-    axes[0, col].imshow(
-        attrs[np.newaxis, :64], aspect="auto",
-        cmap="RdBu_r",
-        vmin=-np.abs(attrs[:64]).max(), vmax=np.abs(attrs[:64]).max(),
-    )
-    axes[0, col].set_title(f"Sample {col+1}")
-    axes[0, col].set_yticks([])
-    if col == 0:
-        axes[0, col].set_ylabel("IG")
+    for col, (attrs, attn) in enumerate(zip(all_attributions[:n_compare], attention_maps[:n_compare])):
+        # IG attribution (row 0)
+        axes[0, col].imshow(
+            attrs[np.newaxis, :64], aspect="auto",
+            cmap="RdBu_r",
+            vmin=-np.abs(attrs[:64]).max(), vmax=np.abs(attrs[:64]).max(),
+        )
+        axes[0, col].set_title(f"Sample {col+1}")
+        axes[0, col].set_yticks([])
+        if col == 0:
+            axes[0, col].set_ylabel("IG")
 
-    # Mean attention over keys (row 1)
-    top_heads = select_top_heads(attn)
-    avg_attn  = attn[top_heads].mean(axis=0).mean(axis=1)  # mean over keys → (L,)
-    axes[1, col].imshow(
-        avg_attn[np.newaxis, :64], aspect="auto", cmap="YlOrRd"
-    )
-    axes[1, col].set_yticks([])
-    axes[1, col].set_xlabel("Token Position")
-    if col == 0:
-        axes[1, col].set_ylabel("Attention")
+        # Mean attention over keys (row 1)
+        top_heads = select_top_heads(attn)
+        avg_attn  = attn[top_heads].mean(axis=0).mean(axis=1)  # mean over keys -> (L,)
+        axes[1, col].imshow(
+            avg_attn[np.newaxis, :64], aspect="auto", cmap="YlOrRd"
+        )
+        axes[1, col].set_yticks([])
+        axes[1, col].set_xlabel("Token Position")
+        if col == 0:
+            axes[1, col].set_ylabel("Attention")
 
-plt.suptitle("Comparison: IG Attributions vs Attention Weights", fontsize=13)
-plt.tight_layout()
-fig_path = FIG_DIR / "ig_attributions_vs_attention_weights.png"
-fig.savefig(fig_path, dpi=300, bbox_inches="tight")
-plt.close(fig)
-print(f"[INFO] Saved figure: {fig_path}")
+    plt.suptitle("Comparison: IG Attributions vs Attention Weights", fontsize=13)
+    plt.tight_layout()
+    fig_path = FIG_DIR / "ig_attributions_vs_attention_weights.png"
+    fig.savefig(str(fig_path), dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[INFO] Saved figure: {fig_path}")
 
 # %% [markdown]
 # **Discussion:** Are attention patterns sparse (focused on specific motifs) or diffuse? How does that compare with IG? Where do they agree or disagree?
