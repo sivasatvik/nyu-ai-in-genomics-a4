@@ -183,6 +183,25 @@ def compute_metrics(y_true: np.ndarray, y_proba: np.ndarray) -> dict:
         "prc_auc":   average_precision_score(y_true, y_proba) if len(np.unique(y_true)) > 1 else float("nan"),
     }
 
+def infer_lora_target_modules(model: nn.Module) -> list[str]:
+    """Infer common attention projection module names for LoRA injection."""
+    preferred_names = ("query", "key", "value", "q_proj", "k_proj", "v_proj")
+    found = []
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Linear):
+            leaf_name = name.split(".")[-1]
+            if leaf_name in preferred_names:
+                found.append(leaf_name)
+
+    # Preserve order but remove duplicates.
+    deduped = list(dict.fromkeys(found))
+    if not deduped:
+        raise ValueError(
+            "Could not infer LoRA target modules from the model. "
+            "Inspect model.named_modules() and set target_modules explicitly."
+        )
+    return deduped
+
 # %% [markdown]
 # ### 1.2.1 NT LoRA (CDS DNA)
 
@@ -222,14 +241,15 @@ if RUN_NT_LORA:
 
     # ── Build LoRA model ────────────────────────────────────────────────────────
     nt_base = AutoModel.from_pretrained(NT_MODEL_ID)
+    nt_target_modules = infer_lora_target_modules(nt_base)
+    print(f"NT LoRA target modules: {nt_target_modules}")
 
     lora_cfg_nt = LoraConfig(
         r=LORA_R,
         lora_alpha=LORA_ALPHA,
         lora_dropout=LORA_DROPOUT,
         bias="none",
-        # target_modules will be inferred automatically for most HF models;
-        # set explicitly if needed, e.g. ["query", "value"]
+        target_modules=nt_target_modules,
     )
     nt_lora = get_peft_model(nt_base, lora_cfg_nt)
     nt_lora.print_trainable_parameters()
@@ -359,13 +379,15 @@ if RUN_ESM2_LORA:
 
     # ── Build LoRA model ────────────────────────────────────────────────────────
     esm2_base = AutoModel.from_pretrained(ESM2_MODEL_ID)
+    esm2_target_modules = infer_lora_target_modules(esm2_base)
+    print(f"ESM2 LoRA target modules: {esm2_target_modules}")
 
     lora_cfg_esm = LoraConfig(
         r=LORA_R,
         lora_alpha=LORA_ALPHA,
         lora_dropout=LORA_DROPOUT,
         bias="none",
-        target_modules=["query", "key", "value"],
+        target_modules=esm2_target_modules,
     )
     esm2_lora = get_peft_model(esm2_base, lora_cfg_esm)
     esm2_lora.print_trainable_parameters()
@@ -498,12 +520,14 @@ for rank in LORA_RANKS:
 
         # Build model
         base_model = AutoModel.from_pretrained(ESM2_MODEL_ID)
+        ablation_target_modules = infer_lora_target_modules(base_model)
+        print(f"Ablation LoRA target modules: {ablation_target_modules}")
         cfg = LoraConfig(
             r=rank,
             lora_alpha=alpha,
             lora_dropout=LORA_DROPOUT,
             bias="none",
-            target_modules=["query", "key", "value"],
+            target_modules=ablation_target_modules,
         )
         peft_model = get_peft_model(base_model, cfg)
         n_trainable = sum(p.numel() for p in peft_model.parameters() if p.requires_grad)
