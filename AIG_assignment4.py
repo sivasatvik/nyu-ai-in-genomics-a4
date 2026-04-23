@@ -401,7 +401,7 @@ if RUN_ESM2_LORA:
     val_loader_esm   = DataLoader(val_ds_esm,   batch_size=BATCH_SIZE)
 
     # ── Build LoRA model ────────────────────────────────────────────────────────
-    esm2_base = AutoModel.from_pretrained(ESM2_MODEL_ID, enable_attentions=True)
+    esm2_base = load_esm2_backbone(ESM2_MODEL_ID, enable_attentions=True)
     esm2_target_modules = infer_lora_target_modules(esm2_base)
     print(f"ESM2 LoRA target modules: {esm2_target_modules}")
 
@@ -542,7 +542,7 @@ for rank in LORA_RANKS:
         t0 = time.time()
 
         # Build model
-        base_model = AutoModel.from_pretrained(ESM2_MODEL_ID, enable_attentions=False)
+        base_model = load_esm2_backbone(ESM2_MODEL_ID, enable_attentions=False)
         ablation_target_modules = infer_lora_target_modules(base_model)
         print(f"Ablation LoRA target modules: {ablation_target_modules}")
         cfg = LoraConfig(
