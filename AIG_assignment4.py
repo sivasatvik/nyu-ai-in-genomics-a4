@@ -474,10 +474,10 @@ if RUN_ESM2_LORA:
 # Paste or re-load your frozen-backbone metrics from Assignment 3 here
 # Example structure (replace values with your actual results):
 frozen_metrics = {
-    "NT_frozen":   {"accuracy": 0.0, "precision": 0.0, "recall": 0.0,
-                    "f1": 0.0, "roc_auc": 0.0, "prc_auc": 0.0},
-    "ESM2_frozen": {"accuracy": 0.0, "precision": 0.0, "recall": 0.0,
-                    "f1": 0.0, "roc_auc": 0.0, "prc_auc": 0.0},
+    "NT_frozen":   {"accuracy": 0.5845, "precision": 0.5812, "recall": 0.5923,
+                    "f1": 0.5832, "roc_auc": 0.6282, "prc_auc": 0.6077},
+    "ESM2_frozen": {"accuracy": 0.5827, "precision": 0.5784, "recall": 0.5802,
+                    "f1": 0.5822, "roc_auc": 0.6099, "prc_auc": 0.5929},
 }
 
 # Collect LoRA metrics
