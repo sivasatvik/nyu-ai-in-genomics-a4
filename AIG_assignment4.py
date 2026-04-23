@@ -202,6 +202,29 @@ def infer_lora_target_modules(model: nn.Module) -> list[str]:
         )
     return deduped
 
+def load_esm2_backbone(model_id: str, enable_attentions: bool = False) -> nn.Module:
+    """Load ESM2 with an attention implementation that can expose weights."""
+    load_kwargs = {}
+    if enable_attentions:
+        # SDPA/flash attention backends may skip returning attention tensors.
+        load_kwargs["attn_implementation"] = "eager"
+
+    try:
+        model = AutoModel.from_pretrained(model_id, **load_kwargs)
+    except TypeError:
+        # Older transformers versions may not accept attn_implementation.
+        model = AutoModel.from_pretrained(model_id)
+
+    for cfg_owner in (model, getattr(model, "base_model", None)):
+        cfg = getattr(cfg_owner, "config", None)
+        if cfg is None:
+            continue
+        cfg.output_attentions = enable_attentions
+        if enable_attentions and hasattr(cfg, "attn_implementation"):
+            cfg.attn_implementation = "eager"
+
+    return model
+
 # %% [markdown]
 # ### 1.2.1 NT LoRA (CDS DNA)
 
@@ -378,7 +401,7 @@ if RUN_ESM2_LORA:
     val_loader_esm   = DataLoader(val_ds_esm,   batch_size=BATCH_SIZE)
 
     # ── Build LoRA model ────────────────────────────────────────────────────────
-    esm2_base = AutoModel.from_pretrained(ESM2_MODEL_ID)
+    esm2_base = AutoModel.from_pretrained(ESM2_MODEL_ID, enable_attentions=True)
     esm2_target_modules = infer_lora_target_modules(esm2_base)
     print(f"ESM2 LoRA target modules: {esm2_target_modules}")
 
@@ -519,7 +542,7 @@ for rank in LORA_RANKS:
         t0 = time.time()
 
         # Build model
-        base_model = AutoModel.from_pretrained(ESM2_MODEL_ID)
+        base_model = AutoModel.from_pretrained(ESM2_MODEL_ID, enable_attentions=False)
         ablation_target_modules = infer_lora_target_modules(base_model)
         print(f"Ablation LoRA target modules: {ablation_target_modules}")
         cfg = LoraConfig(
@@ -798,11 +821,16 @@ print(f"[INFO] Saved figure: {fig_path}")
 esm2_model.eval()
 
 attention_maps = []  # list of (n_heads, seq_len, seq_len) arrays
+attention_attr_pairs = []
 
-# Some backends/checkpoints may not return attention tensors even when
-# output_attentions=True. Handle this gracefully instead of crashing.
-if hasattr(esm2_model.backbone, "config") and hasattr(esm2_model.backbone.config, "attn_implementation"):
-    esm2_model.backbone.config.attn_implementation = "eager"
+# Ensure the fine-tuned PEFT wrapper still advertises attention outputs.
+for cfg_owner in (esm2_model.backbone, getattr(esm2_model.backbone, "base_model", None)):
+    cfg = getattr(cfg_owner, "config", None)
+    if cfg is None:
+        continue
+    cfg.output_attentions = True
+    if hasattr(cfg, "attn_implementation"):
+        cfg.attn_implementation = "eager"
 
 with torch.no_grad():
     for i in range(len(high_conf_idx)):
@@ -821,7 +849,9 @@ with torch.no_grad():
             print(f"[WARN] No attention tensors returned for sample {i}; skipping.")
             continue
         last_layer_attn = attentions[-1]  # (1, n_heads, L, L)
-        attention_maps.append(last_layer_attn.squeeze(0).cpu().numpy())  # (n_heads, L, L)
+        attn_np = last_layer_attn.squeeze(0).cpu().numpy()
+        attention_maps.append(attn_np)  # (n_heads, L, L)
+        attention_attr_pairs.append((all_attributions[i], attn_np))
 
 print(f"Attention map shapes: {[a.shape for a in attention_maps]}")
 
@@ -863,12 +893,12 @@ else:
 if len(attention_maps) == 0:
     print("[WARN] Skipping IG-vs-attention comparison because no attention maps were returned.")
 else:
-    n_compare = min(5, len(all_attributions), len(attention_maps))
+    n_compare = min(5, len(attention_attr_pairs))
     fig, axes = plt.subplots(2, n_compare, figsize=(16, 5))
     if n_compare == 1:
         axes = np.array(axes).reshape(2, 1)
 
-    for col, (attrs, attn) in enumerate(zip(all_attributions[:n_compare], attention_maps[:n_compare])):
+    for col, (attrs, attn) in enumerate(attention_attr_pairs[:n_compare]):
         # IG attribution (row 0)
         axes[0, col].imshow(
             attrs[np.newaxis, :64], aspect="auto",
