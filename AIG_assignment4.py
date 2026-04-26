@@ -80,12 +80,30 @@ print(f"Dataset shape: {df.shape}")
 print(df.head())
 print(df.columns.tolist())
 
+# %% [markdown]
+# Dataset shape: (2591, 8)
+# 
+# |id | species | symbol | ensembl_gene_id |  ...                                        | protein_seq | chrom | strand|
+# |--|--------|--------|----------------|-----|---------------------------------------------------|-------|-----|
+# | 0 | human | TEAD3 | ENSG00000007866 | ... | MASNSWNASSSPGEAREDGPEGLDKGLDNDAEGVWSPDIEQSFQEA...  |   6   | -1 |
+# | 1 | human | ZNF469 | ENSG00000225614 | ... | MPGERPRGAPPPTMTGDLQPRQVASSPGHPSQPPLEDNTPATRTTK...  |  16  |  1 |
+# | 2 | human  |  SIX4 | ENSG00000100625 | ... | MIASAADIKQENGMESASEGQEAHREVAGGAAVGLSPPAPAPFPLE...  |  14 |  -1 |
+# | 3  | human  |  RFX5 | ENSG00000143390 | ... | MAEDEPDAKSPKTGGRAPPGGAEAGEPTTLLQRLRGTISKAVQNKV...  |   1  | -1 |
+# | 4 |  human  | SMAD5 | ENSG00000113658 | ... | MTSMASLFSFTSPAVKRLLGWKQGDEEEKWAEKAVDALVKKLKKKK...  |  5  |  1 |
+# 
+# [5 rows x 8 columns]
+# 
+# ['species', 'symbol', 'ensembl_gene_id', 'is_tf', 'cds_seq', 'protein_seq', 'chrom', 'strand']
+
 # %%
 # Load split indices from Assignment 3
 with open(DATA_DIR / "tf_split_indices.json", "r") as f:
     split_indices = json.load(f)
 
 print("Available splits:", list(split_indices.keys()))
+
+# %% [markdown]
+# Available splits: ['split1_train', 'split1_val', 'split1_test', 'split2_train', 'split2_val', 'split2_test', 'split3_train', 'split3_val', 'split3_test']
 
 # %%
 # Load precomputed embeddings
@@ -95,6 +113,11 @@ protein_embeddings = np.load(DATA_DIR / "protein_embeddings.npy")
 print(f"DNA embeddings shape:     {dna_embeddings.shape}")
 print(f"Protein embeddings shape: {protein_embeddings.shape}")
 
+# %% [markdown]
+# DNA embeddings shape:     (2591, 1024)
+# 
+# Protein embeddings shape: (2591, 1280)
+
 # %%
 # Extract Split 1 indices (human train → mouse/fly zero-shot transfer)
 
@@ -103,6 +126,9 @@ val_idx   = split_indices["split1_val"]
 test_idx  = split_indices["split1_test"]
 
 print(f"Train: {len(train_idx)} | Val: {len(val_idx)} | Test: {len(test_idx)}")
+
+# %% [markdown]
+# Train: 700 | Val: 150 | Test: 1591
 
 # %%
 # Build is_tf arrays
@@ -115,6 +141,13 @@ y_test  = labels[test_idx]
 print(f"Train class distribution: {np.bincount(y_train)}")
 print(f"Val class distribution:   {np.bincount(y_val)}")
 print(f"Test class distribution:  {np.bincount(y_test)}")
+
+# %% [markdown]
+# Train class distribution: [350 350]
+# 
+# Val class distribution:   [75 75]
+# 
+# Test class distribution:  [800 791]
 
 # %% [markdown]
 # ---
@@ -347,24 +380,34 @@ if RUN_NT_LORA:
         print(f"  {k}: {v:.4f}")
 
 # %% [markdown]
-# ### 1.2.2 Evo-2 LoRA (CDS; environment-dependent - optional)
-
-# %%
-if RUN_EVO2_LORA:
-    # NOTE: Evo2 requires a special installation and may not be available in all environments.
-    # Uncomment and adapt the code below if Evo2 is available in your environment.
-    print("=== Evo-2 LoRA Fine-Tuning ===")
-
-    # from evo2 import Evo2  # hypothetical import; adjust to your installation
-    # evo2_model = Evo2(EVO2_MODEL_NAME)
-
-    # Hook into the specified layer to extract sequence-level embeddings
-    # then apply LoRA and a classifier head similarly to NT above.
-
-    # --- Your Evo-2 LoRA implementation here ---
-    pass
-else:
-    print("Evo-2 LoRA skipped (RUN_EVO2_LORA=False)")
+# === NT LoRA Fine-Tuning ===
+# 
+# NT LoRA target modules: ['query', 'key', 'value']
+# 
+# trainable params: 1,474,560 || all params: 481,912,801 || trainable%: 0.3060
+# 
+#   Epoch 1/10 | Train Loss: 0.6775 | Val Loss: 0.6611
+# 
+#   Epoch 2/10 | Train Loss: 0.5696 | Val Loss: 0.5706
+# 
+#   Epoch 3/10 | Train Loss: 0.4163 | Val Loss: 0.6002
+# 
+#   Epoch 4/10 | Train Loss: 0.2905 | Val Loss: 0.7050
+# 
+#   Epoch 5/10 | Train Loss: 0.1851 | Val Loss: 0.7646
+# 
+#   Epoch 6/10 | Train Loss: 0.1322 | Val Loss: 1.3166
+# 
+#   Epoch 7/10 | Train Loss: 0.1424 | Val Loss: 0.7929
+# 
+#   Epoch 8/10 | Train Loss: 0.0968 | Val Loss: 1.0348
+# 
+#   Epoch 9/10 | Train Loss: 0.0789 | Val Loss: 1.0746
+# 
+#   Epoch 10/10 | Train Loss: 0.0748 | Val Loss: 1.1656
+# 
+# 
+# NT LoRA Validation Metrics: accuracy: 0.7600, precision: 0.8197, recall: 0.6667, f1: 0.7353, roc_auc: 0.8148, prc_auc: 0.8195
 
 # %% [markdown]
 # ### 1.2.3 ESM2 LoRA (protein)
@@ -466,13 +509,41 @@ if RUN_ESM2_LORA:
         print(f"  {k}: {v:.4f}")
 
 # %% [markdown]
+# === ESM2 LoRA Fine-Tuning ===
+# 
+# ESM2 LoRA target modules: ['query', 'key', 'value']
+# 
+# trainable params: 276,480 || all params: 33,776,881 || trainable%: 0.8185
+# 
+#   Epoch 1/10 | Train Loss: 0.6210 | Val Loss: 0.4670
+# 
+#   Epoch 2/10 | Train Loss: 0.3415 | Val Loss: 0.4005
+# 
+#   Epoch 3/10 | Train Loss: 0.2846 | Val Loss: 0.3491
+# 
+#   Epoch 4/10 | Train Loss: 0.2512 | Val Loss: 0.3192
+# 
+#   Epoch 5/10 | Train Loss: 0.2104 | Val Loss: 0.3087
+# 
+#   Epoch 6/10 | Train Loss: 0.1914 | Val Loss: 0.3187
+# 
+#   Epoch 7/10 | Train Loss: 0.1502 | Val Loss: 0.3807
+# 
+#   Epoch 8/10 | Train Loss: 0.1280 | Val Loss: 0.3989
+# 
+#   Epoch 9/10 | Train Loss: 0.1042 | Val Loss: 0.4087
+# 
+#   Epoch 10/10 | Train Loss: 0.0801 | Val Loss: 0.4426
+# 
+# ESM2 LoRA Validation Metrics: accuracy: 0.8533, precision: 0.8354, recall: 0.8800, f1: 0.8571, roc_auc: 0.9470, prc_auc: 0.9413
+
+# %% [markdown]
 # ---
 # 
 # ## 1.3 Frozen vs LoRA Comparison
 
 # %%
-# Paste or re-load your frozen-backbone metrics from Assignment 3 here
-# Example structure (replace values with your actual results):
+# Frozen model metrics from assignment 3
 frozen_metrics = {
     "NT_frozen":   {"accuracy": 0.5845, "precision": 0.5812, "recall": 0.5923,
                     "f1": 0.5832, "roc_auc": 0.6282, "prc_auc": 0.6077},
@@ -491,6 +562,14 @@ if RUN_ESM2_LORA:
 all_results = {**frozen_metrics, **lora_results}
 comparison_df = pd.DataFrame(all_results).T
 print(comparison_df.to_string())
+
+# %% [markdown]
+# |   model    | accuracy | precision  |  recall |   f1   | roc_auc  | prc_auc |
+# |------------|-----------|-----------|-----------|----------|----------|----------|
+# | NT_frozen  |  0.584500 |  0.581200 |  0.592300 | 0.583200 | 0.628200 |  0.607700 |
+# | ESM2_frozen|  0.582700 |  0.578400 |  0.580200 | 0.582200 | 0.609900 |  0.592900 |
+# | NT_LoRA    |  0.760000 |  0.819672 |  0.666667 | 0.735294 | 0.814756 |  0.819454 |
+# | ESM2_LoRA  |  0.853333 |  0.835443 |  0.880000 | 0.857143 | 0.947022 |  0.941252 |
 
 # %%
 # Visualize comparison
@@ -513,9 +592,10 @@ plt.close(fig)
 print(f"[INFO] Saved figure: {fig_path}")
 
 # %% [markdown]
-# **Discussion:** Summarize where LoRA helps most and whether it changes the precision–recall tradeoff.
+# ![Metrics Comparision](figures/frozen_backbone_vs_lora_ft.png)
+# Looking at the metrics, we can see that the metrics from LoRA fine-tuning are significantly better than the frozen backbone models. This suggests that even a small number of trainable parameters can lead to substantial performance improvements when fine-tuning large pretrained models on specific tasks. The ESM2 LoRA model, in particular, shows a marked increase in both F1 score and ROC-AUC compared to its frozen counterpart, indicating that the protein sequence information is being effectively leveraged through fine-tuning.
 # 
-# > *Your answer here.*
+# The precision-recall tradeoff seems to shift in favor of higher precision with LoRA fine-tuning, especially for the NT model. This could indicate that the LoRA adapters are helping the model to focus on more relevant features in the input sequences, leading to fewer false positives. The ESM2 LoRA model also shows a significant boost in recall, suggesting that it is better at identifying true positives compared to the frozen version. Overall, these results highlight the effectiveness of LoRA fine-tuning in improving model performance while maintaining parameter efficiency.
 
 # %% [markdown]
 # ---
@@ -595,6 +675,24 @@ print("\nAblation Results:")
 print(ablation_df.to_string(index=False))
 
 # %% [markdown]
+# Ablation Results:
+# 
+# | rank | alpha | n_trainable_params | runtime_s | accuracy | precision | recall | f1 | roc_auc | prc_auc |
+# |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+# | 4 | 8 | 138240 | 21.4 | 0.853333 | 0.835443 | 0.880000 | 0.857143 | 0.936533 | 0.932754 |
+# | 4 | 16 | 138240 | 21.2 | 0.853333 | 0.827160 | 0.893333 | 0.858974 | 0.942044 | 0.939710 |
+# | 4 | 32 | 138240 | 21.2 | 0.860000 | 0.837500 | 0.893333 | 0.864516 | 0.944000 | 0.941087 |
+# | 8 | 8 | 276480 | 21.2 | 0.840000 | 0.831169 | 0.853333 | 0.842105 | 0.928711 | 0.923771 |
+# | 8 | 16 | 276480 | 21.3 | 0.840000 | 0.840000 | 0.840000 | 0.840000 | 0.929244 | 0.922239 |
+# | 8 | 32 | 276480 | 21.5 | 0.860000 | 0.846154 | 0.880000 | 0.862745 | 0.941156 | 0.930151 |
+# | 16 | 8 | 552960 | 21.3 | 0.860000 | 0.837500 | 0.893333 | 0.864516 | 0.938667 | 0.934450 |
+# | 16 | 16 | 552960 | 21.3 | 0.846667 | 0.833333 | 0.866667 | 0.849673 | 0.938667 | 0.932619 |
+# | 16 | 32 | 552960 | 21.3 | 0.800000 | 0.835821 | 0.746667 | 0.788732 | 0.924267 | 0.916802 |
+# | 32 | 8 | 1105920 | 21.4 | 0.846667 | 0.842105 | 0.853333 | 0.847682 | 0.935111 | 0.930364 |
+# | 32 | 16 | 1105920 | 21.4 | 0.853333 | 0.827160 | 0.893333 | 0.858974 | 0.931733 | 0.917520 |
+# | 32 | 32 | 1105920 | 21.4 | 0.813333 | 0.840580 | 0.773333 | 0.805556 | 0.932622 | 0.926138 |
+
+# %% [markdown]
 # ### 1.4.2 Visualize Parameter Efficiency vs Performance
 
 # %%
@@ -637,9 +735,8 @@ plt.close(fig)
 print(f"[INFO] Saved figure: {fig_path}")
 
 # %% [markdown]
-# **Discussion:** Is there a sweet spot between the number of parameters, runtime, and performance?
-# 
-# > *Your answer here.*
+# ![LoRA Hyperparameters Ablations](figures/lora_hyp_ablations.png)
+# Based on the above ablation results, we can see that the number of trainable parameters increases with higher rank values, as expected. The runtime remains relatively stable across different configurations, suggesting that the computational overhead of LoRA fine-tuning is not significantly affected by the choice of rank and alpha within this range. The f1 scores and ROC-AUC values show some variability, with certain configurations (e.g., rank=4, alpha=32) achieving higher performance metrics. However, there doesn't seem to be a clear linear relationship between the number of trainable parameters and performance, indicating that there may be a sweet spot in the hyperparameter space that balances parameter efficiency and model performance. This highlights the importance of hyperparameter tuning when applying LoRA fine-tuning to achieve optimal results on specific tasks.
 
 # %% [markdown]
 # ---
@@ -648,21 +745,9 @@ print(f"[INFO] Saved figure: {fig_path}")
 # 
 # ## 2.1 Attribution Analysis: Understanding Model Decisions
 # 
-# **Learning Objective:** What drives your models' predictions? Do they learn biologically "meaningful" patterns? Here you will use a few different methodologies to try and identify what the model is learning.
-# 
-# **Why Attribution Matters:**
-# - Opening the black box — What do foundation models learn?
-# - If they actually learn useful biology, we should be able to trace residue level (nucleotide or amino acid) to results
-# - Comparing multiple methods (gradients, attention, SHAP) validates findings
-# - Biological validation: do high-attribution regions match known TF motifs (e.g. HLH, Zinc finger, etc.)?
-# 
 # ---
 # 
 # ### 2.1.1 Integrated Gradients for Attribution
-# 
-# **What is Integrated Gradients?**
-# 
-# Once again we use our favourite library, captum, to help us with this task. We integrate gradients along a path from a random sequence baseline to an input sequence to identify which positions in the sequence are most important for the model's prediction.
 
 # %%
 from captum.attr import IntegratedGradients
@@ -728,6 +813,9 @@ for i in range(len(high_conf_idx)):
 
 print(f"Attribution shapes: {[a.shape for a in all_attributions]}")
 
+# %% [markdown]
+# Attribution shapes: [(512,), (512,), (512,), (512,), (512,), (512,), (512,), (512,), (512,), (512,)]
+
 # %%
 # ── Visualise attributions as heatmaps ──────────────────────────────────────
 fig, axes = plt.subplots(min(5, len(all_attributions)), 1,
@@ -754,6 +842,9 @@ fig.savefig(fig_path, dpi=300, bbox_inches="tight")
 plt.close(fig)
 print(f"[INFO] Saved figure: {fig_path}")
 
+# %% [markdown]
+# ![IG Token Level Attributions](figures/ig_token_level_attributions.png)
+
 # %%
 # ── Extract top-5 high-attribution windows (window size = 30) ───────────────
 WINDOW_SIZE = 30
@@ -768,6 +859,19 @@ print("Top attribution windows per sequence:")
 for i, attrs in enumerate(all_attributions[:5]):
     windows = top_k_windows(attrs)
     print(f"  Sample {i}: {windows}")
+
+# %% [markdown]
+# Top attribution windows per sequence:
+# 
+#   Sample 0: [(475, 505, 0.009095029276795685), (476, 506, 0.009547541531113287), (477, 507, 0.009630925751601656), (478, 508, 0.009594724979251621), (479, 509, 0.009484857600182292)]
+# 
+#   Sample 1: [(0, 30, 0.007542296755127607), (1, 31, 0.00758620580503096), (2, 32, 0.004681570370060701), (3, 33, 0.004642707514964664), (4, 34, 0.00453136881502966)]
+# 
+#   Sample 2: [(0, 30, 0.023695754345195982), (1, 31, 0.024074877480355396), (2, 32, 0.0189634165338551), (3, 33, 0.018578170076943932), (4, 34, 0.016965208163795372)]
+# 
+#   Sample 3: [(0, 30, 0.009418478303511314), (1, 31, 0.009578890033299101), (2, 32, 0.005724371649557727), (3, 33, 0.005572640241977449), (5, 35, 0.005525510670850054)]
+#   
+#   Sample 4: [(0, 30, 0.005426976657084501), (1, 31, 0.005429855881569288), (2, 32, 0.004790489288279787), (3, 33, 0.003919008903903886), (5, 35, 0.0035609287529950956)]
 
 # %%
 # ── Sequence logo for the highest-attribution window of the first sample ─────
@@ -803,18 +907,15 @@ plt.close(fig)
 print(f"[INFO] Saved figure: {fig_path}")
 
 # %% [markdown]
-# **Discussion:** Do high-attribution regions correspond to any known domains? Are there species-specific attribution patterns?
-# 
-# > *Your answer here.*
+# ![Attributions Bar Chart](figures/attribution_bar_chart.png)
+
+# %% [markdown]
+# The top attribution windows for the first sample show a cluster of high scores around 475–505, which may indicate a biologically relevant motif or domain in the protein sequence. To determine if these regions correspond to known domains, we could cross-reference the high-attribution positions with databases of protein motifs (e.g., Pfam) or perform a BLAST search to find similar sequences with annotated functions. There are other high-attribution windows at the beginning of the sequence (0–30) in other samples, which could suggest the presence of signal peptides or other N-terminal features. Species-specific patterns might emerge if certain motifs are conserved in specific taxa, so it would be interesting to analyze the taxonomic distribution of the samples and see if high-attribution regions correlate with particular evolutionary lineages.
 
 # %% [markdown]
 # ---
 # 
 # ### 2.1.2 Attention Weights Visualization
-# 
-# **What are Attention Weights?**
-# 
-# Transformer models (NT, Evo2, ESM2) use multi-head self-attention to weigh the importance of different positions. Attention weights show which tokens the model "attends to" when making predictions.
 
 # %%
 # ── Extract attention weights for the same 5-10 sequences ───────────────────
@@ -855,6 +956,9 @@ with torch.no_grad():
 
 print(f"Attention map shapes: {[a.shape for a in attention_maps]}")
 
+# %% [markdown]
+# Attention map shapes: [(20, 512, 512), (20, 512, 512), (20, 512, 512), (20, 512, 512), (20, 512, 512), (20, 512, 512), (20, 512, 512), (20, 512, 512), (20, 512, 512), (20, 512, 512)]
+
 # %%
 # ── Average attention: use the head with highest variance ───────────────────
 def select_top_heads(attn_matrix, n_top=4):
@@ -887,6 +991,9 @@ else:
     fig.savefig(str(fig_path), dpi=300, bbox_inches="tight")
     plt.close(fig)
     print(f"[INFO] Saved figure: {fig_path}")
+
+# %% [markdown]
+# ![Attention Weights](figures/attention_weights.png)
 
 # %%
 # ── Compare attention rollout vs IG attributions ────────────────────────────
@@ -929,20 +1036,15 @@ else:
     print(f"[INFO] Saved figure: {fig_path}")
 
 # %% [markdown]
-# **Discussion:** Are attention patterns sparse (focused on specific motifs) or diffuse? How does that compare with IG? Where do they agree or disagree?
-# 
-# > *Your answer here.*
+# ![IG Attributions vs Attention Weights](figures/ig_attributions_vs_attention_weights.png)
+
+# %% [markdown]
+# In the attention heatmaps, we observe that certain heads exhibit more focused attention patterns, attending strongly to specific token positions, while others show more diffuse attention across the sequence. When comparing the IG attributions with the attention weights, we see that in some samples, high IG attribution regions correspond to areas where attention is also concentrated, suggesting that the model is indeed focusing on biologically relevant motifs. However, there are also cases where IG highlights certain positions that do not align with strong attention weights, which could indicate that the model is using a combination of local and global information to make predictions. This discrepancy might arise because attention weights capture pairwise interactions between tokens, while IG captures the overall contribution of each token to the final prediction. Therefore, both methods provide complementary insights into the model's decision-making process.
 
 # %% [markdown]
 # ---
 # 
 # ### 2.1.3 Sparse Autoencoder (SAE) Feature Extraction
-# 
-# **What are Sparse Autoencoders?**
-# 
-# The recent breakthrough in mechanistic interpretability are Sparse Autoencoders (SAEs). They aim to decompose a model's latent dimension into interpretable sparse features. Each SAE feature ideally corresponds to a meaningful biological concept (e.g., a specific motif, structural domain, or sequence pattern).
-# 
-# SAEs project dense model activations into a **much higher** dimension "dictionary" using a linear encoder and a ReLU, paired with an L1 penalty to encourage monosemanticity.
 
 # %%
 # ── Sparse Autoencoder definition ───────────────────────────────────────────
@@ -1009,6 +1111,9 @@ hook_handle.remove()
 activations = activation_cache["layer6"]  # (SAE_SAMPLE_SIZE, hidden_size)
 print(f"Activations shape: {activations.shape}")
 
+# %% [markdown]
+# Activations shape: torch.Size([20, 480])
+
 # %%
 # ── Train SAE ────────────────────────────────────────────────────────────────
 INPUT_DIM = activations.shape[1]
@@ -1044,6 +1149,9 @@ fig_path = FIG_DIR / "sae_training_loss.png"
 fig.savefig(fig_path, dpi=300, bbox_inches="tight")
 print(f"[INFO] Saved figure: {fig_path}")
 
+# %% [markdown]
+# ![SAE Training Loss](figures/sae_training_loss.png)
+
 # %%
 # ── Analyze learned features ─────────────────────────────────────────────────
 sae.eval()
@@ -1053,6 +1161,11 @@ with torch.no_grad():
 features_np = features_all.cpu().numpy()  # (n_samples, dict_dim)
 print(f"Feature matrix shape: {features_np.shape}")
 print(f"Sparsity (fraction zero): {(features_np == 0).mean():.3f}")
+
+# %% [markdown]
+# Feature matrix shape: (20, 1920)
+# 
+# Sparsity (fraction zero): 0.720
 
 # %%
 # ── Which features activate most strongly for TFs vs non-TFs? ───────────────
@@ -1069,6 +1182,11 @@ top10_non_tf = np.argsort(diff)[:10]
 
 print("Top 10 features more active for TFs:", top10_tf)
 print("Top 10 features more active for non-TFs:", top10_non_tf)
+
+# %% [markdown]
+# Top 10 features more active for TFs: [1525 1664 1704  297  170   55 1815 1370 1480 1711]
+# 
+# Top 10 features more active for non-TFs: [  38 1371  139 1304 1529  424 1826   93  608 1248]
 
 # %%
 # ── Heatmap: feature activations for TF vs non-TF ───────────────────────────
@@ -1099,12 +1217,15 @@ fig.savefig(fig_path, dpi=300, bbox_inches="tight")
 plt.close(fig)
 print(f"[INFO] Saved figure: {fig_path}")
 
+# %% [markdown]
+# ![SAE Feature Activations](figures/sae_feature_activations.png)
+# In the above heatmaps, we can see that certain SAE features are consistently more active in non-TF samples compared to TF samples, and vice versa. This suggests that the SAE has learned to capture some underlying patterns that differentiate TFs from non-TFs. To determine if these features correspond to known protein domains, we could analyze the sequences that strongly activate each feature and perform motif enrichment analysis or compare them against databases of protein domains (e.g., Pfam). Additionally, we could investigate if the top SAE features align with the high-attribution regions identified by IG and attention analyses, which would provide further evidence that these features are biologically meaningful and relevant to the model's predictions.
+
 # %%
 # ── Compare SAE features to IG attributions ──────────────────────────────────
 # For each of the SAE samples that also appear in our IG sample set,
 # compare the most active SAE feature against the IG top window.
 
-# (Conceptual comparison — adapt to your actual data structure)
 print("SAE vs IG comparison (qualitative):")
 for i in range(min(5, len(sae_labels))):
     top_sae_feat = np.argsort(features_np[i])[::-1][:5]
@@ -1112,8 +1233,25 @@ for i in range(min(5, len(sae_labels))):
     print(f"  Sample {i} ({label_str}) — top SAE features: {top_sae_feat}")
 
 # %% [markdown]
-# **Discussion:** Which SAE features activate most strongly for TFs vs non-TFs? Do features correspond to known protein domains (e.g., DNA-binding domains, zinc fingers)? How do SAE features compare to the IG and attention attribution results from 2.1.1 and 2.1.2?
+# SAE vs IG comparison (qualitative):
 # 
-# > *Your answer here.*
+#   Sample 0 (TF) — top SAE features: [ 308 1450  569 1557 1272]
+# 
+#   Sample 1 (TF) — top SAE features: [1525  308 1450 1261 1557]
+# 
+#   Sample 2 (TF) — top SAE features: [ 477 1782 1250 1681 1040]
+# 
+#   Sample 3 (TF) — top SAE features: [1450 1159  308 1664 1557]
+#   
+#   Sample 4 (TF) — top SAE features: [1837 1782  477  139  299]
+
+# %% [markdown]
+# The SAE features that activate most strongly for TFs may correspond to specific sequence patterns or structural motifs that are characteristic of transcription factors, such as DNA-binding domains (e.g., helix-turn-helix, zinc fingers). To determine if these features align with known protein domains, we could analyze the sequences that strongly activate each feature and perform motif enrichment analysis against databases like Pfam. When comparing the SAE features to the IG and attention attribution results, we might find that certain SAE features correspond to the high-attribution regions identified by IG and attention analyses, suggesting that these features capture biologically relevant information that the model uses for its predictions. However, it's also possible that some SAE features capture more abstract patterns that do not directly align with specific motifs but still contribute to the model's decision-making process.
+
+# %% [markdown]
+# # References:
+# - https://github.com/sivasatvik/nyu-ai-in-genomics-a4/tasks/6bd42c14-47cd-419f-ad76-0a346e2ddec6 - created the PR with the relevant changes: https://github.com/sivasatvik/nyu-ai-in-genomics-a4/pull/1
+# - Various auto completes in Visual Code IDE
+# 
 
 
