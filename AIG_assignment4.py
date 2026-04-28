@@ -1495,69 +1495,69 @@ print("""
 # For each important SAE feature, query InterPro for sequences that activate it
 
 # Define important features if not already defined
-if 'important_features' not in locals():
-    important_features = top10_tf[:5]  # focus on top 5 TF features
+# if 'important_features' not in locals():
+#     important_features = top10_tf[:5]  # focus on top 5 TF features
 
-print("\n" + "="*60)
-print("SAE Feature to Known Domain Mapping (via InterPro)")
-print("="*60 + "\n")
+# print("\n" + "="*60)
+# print("SAE Feature to Known Domain Mapping (via InterPro)")
+# print("="*60 + "\n")
 
-feature_domain_mapping = []
+# feature_domain_mapping = []
 
-for feat_idx in important_features[:3]:  # analyze top 3 features (limit API calls)
-    print(f"\nFeature {feat_idx} - Searching for domains in activating sequences...")
+# for feat_idx in important_features[:3]:  # analyze top 3 features (limit API calls)
+#     print(f"\nFeature {feat_idx} - Searching for domains in activating sequences...")
 
-    activation_scores = features_np[:, feat_idx]
-    top_activators = np.argsort(activation_scores)[::-1][:2]  # top 2 samples
+#     activation_scores = features_np[:, feat_idx]
+#     top_activators = np.argsort(activation_scores)[::-1][:2]  # top 2 samples
 
-    for sample_idx in top_activators:
-        orig_idx = val_idx[sample_idx]
-        protein_seq = df.loc[orig_idx, "protein_seq"]
-        gene_symbol = df.loc[orig_idx, "symbol"]
-        label_str = "TF" if sae_labels[sample_idx] == 1 else "non-TF"
+#     for sample_idx in top_activators:
+#         orig_idx = val_idx[sample_idx]
+#         protein_seq = df.loc[orig_idx, "protein_seq"]
+#         gene_symbol = df.loc[orig_idx, "symbol"]
+#         label_str = "TF" if sae_labels[sample_idx] == 1 else "non-TF"
 
-        # Query full sequence against InterPro (or a window if sequence is very long)
-        query_seq = protein_seq[:500] if len(protein_seq) > 500 else protein_seq
+#         # Query full sequence against InterPro (or a window if sequence is very long)
+#         query_seq = protein_seq[:500] if len(protein_seq) > 500 else protein_seq
 
-        print(f"  → {gene_symbol} ({label_str}, len={len(protein_seq)})")
+#         print(f"  → {gene_symbol} ({label_str}, len={len(protein_seq)})")
 
-        # Use the corrected InterProScan wrapper and pass the required email argument
-        interpro_json = query_interpro_domains(query_seq, email="abcd" + str(sample_idx) + "@abc.com")
+#         # Use the corrected InterProScan wrapper and pass the required email argument
+#         interpro_json = query_interpro_domains(query_seq, email="abcde" + str(sample_idx) + "@abc.com")
 
-        if "error" in interpro_json:
-            print(f"    InterPro query failed: {interpro_json['error']}")
-            continue
+#         if "error" in interpro_json:
+#             print(f"    InterPro query failed: {interpro_json['error']}")
+#             continue
 
-        parsed_matches = parse_interpro_matches(interpro_json)
-        if parsed_matches:
-            print(f"    Found {len(parsed_matches)} match(es):")
-            for match in parsed_matches[:3]:
-                print(
-                    f"      • {match['name']} ({match['accession']}), "
-                    f"type={match['type']}, region={match['start']}-{match['end']}"
-                )
-                feature_domain_mapping.append({
-                    "feature_idx": feat_idx,
-                    "gene": gene_symbol,
-                    "is_tf": sae_labels[sample_idx],
-                    "domain": match["name"],
-                    "accession": match["accession"],
-                    "type": match["type"],
-                    "domain_start": match["start"],
-                    "domain_end": match["end"],
-                })
-        else:
-            print("    No known domains found")
+#         parsed_matches = parse_interpro_matches(interpro_json)
+#         if parsed_matches:
+#             print(f"    Found {len(parsed_matches)} match(es):")
+#             for match in parsed_matches[:3]:
+#                 print(
+#                     f"      • {match['name']} ({match['accession']}), "
+#                     f"type={match['type']}, region={match['start']}-{match['end']}"
+#                 )
+#                 feature_domain_mapping.append({
+#                     "feature_idx": feat_idx,
+#                     "gene": gene_symbol,
+#                     "is_tf": sae_labels[sample_idx],
+#                     "domain": match["name"],
+#                     "accession": match["accession"],
+#                     "type": match["type"],
+#                     "domain_start": match["start"],
+#                     "domain_end": match["end"],
+#                 })
+#         else:
+#             print("    No known domains found")
 
-if feature_domain_mapping:
-    print("\n" + "="*60)
-    print("Feature-Domain Summary Table:")
-    print("="*60)
-    feature_domain_df = pd.DataFrame(feature_domain_mapping)
-    print(feature_domain_df.to_string(index=False))
-else:
-    print("\nNo InterPro domain mappings found.")
-    print("This may be expected if features capture abstract patterns not matching annotated domains.")
+# if feature_domain_mapping:
+#     print("\n" + "="*60)
+#     print("Feature-Domain Summary Table:")
+#     print("="*60)
+#     feature_domain_df = pd.DataFrame(feature_domain_mapping)
+#     print(feature_domain_df.to_string(index=False))
+# else:
+#     print("\nNo InterPro domain mappings found.")
+#     print("This may be expected if features capture abstract patterns not matching annotated domains.")
 
 # %%
 # ── Interpret SAE features by analyzing which sequences activate them ────────────
