@@ -1035,7 +1035,7 @@ for sample_idx in range(min(3, len(all_attributions))):  # analyze first 3 sampl
             print(f"    Window [{win_start_adj}-{win_end_adj}] (attr={score:.6f}): {window_seq[:20]}...")
 
             # Query InterPro and parse the raw JSON response correctly
-            interpro_json = query_interpro_domains(window_seq, email="xyz@abc.com")
+            interpro_json = query_interpro_domains(window_seq, email="abc" + str(sample_idx) + "@abc.com")
 
             if "error" in interpro_json:
                 print(f"      InterPro query failed: {interpro_json['error']}")
@@ -1520,7 +1520,7 @@ for feat_idx in important_features[:3]:  # analyze top 3 features (limit API cal
         print(f"  → {gene_symbol} ({label_str}, len={len(protein_seq)})")
 
         # Use the corrected InterProScan wrapper and pass the required email argument
-        interpro_json = query_interpro_domains(query_seq, email="xyz@abc.com", timeout=5)
+        interpro_json = query_interpro_domains(query_seq, email="abc" + str(sample_idx) + "@abc.com")
 
         if "error" in interpro_json:
             print(f"    InterPro query failed: {interpro_json['error']}")
