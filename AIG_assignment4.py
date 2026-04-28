@@ -913,31 +913,99 @@ print(f"[INFO] Saved figure: {fig_path}")
 # 
 # For the high-attribution regions identified above, we compare against known protein domains using the **InterPro** API. Since we're analyzing ESM2 (protein) attributions, InterPro is more appropriate than JASPAR (which is for nucleotide motifs). This helps validate whether high-attribution regions correspond to known DNA-binding domains or other functional domains characteristic of transcription factors.
 # 
+# **Note**: InterPro API queries may occasionally timeout or fail due to rate limiting. If you see errors, the system will gracefully handle them and report the issue. For production use, consider installing a local InterPro database or using batch search functionality.
 
 # %%
 # ── Compare top-attribution windows against known TF domains (InterPro) ──────
 # Extract actual protein sequences for the high-attribution windows
 # and look them up in InterPro for known protein domains
 
-def query_interpro_domains(sequence: str, timeout: int = 10) -> dict:
+import time
+
+def query_interpro_domains(sequence: str, email: str, timeout: int = 300) -> dict:
     """
-    Query InterPro API to identify protein domains in a sequence.
-    Returns a dict with domain annotations.
+    Query InterProScan 5 API asynchronously.
+    Requires an email address per EBI usage policy.
+
+    Returns the raw JSON response from InterProScan.
     """
-    import requests
-    import time
-    
-    url = "https://www.ebi.ac.uk/interpro/api/protein/matched"
-    params = {"sequence": sequence}
-    
+    BASE_URL = "https://www.ebi.ac.uk/Tools/services/rest/iprscan5"
+
     try:
-        response = requests.get(url, params=params, timeout=timeout)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return {"error": f"HTTP {response.status_code}"}
+        submit_res = requests.post(
+            f"{BASE_URL}/run",
+            data={
+                "email": email,
+                "sequence": sequence,
+                "goterms": "false",
+                "pathways": "false",
+            },
+            timeout=10,
+        )
+
+        if submit_res.status_code != 200:
+            return {"error": f"Submission failed: {submit_res.status_code}", "msg": submit_res.text}
+
+        job_id = submit_res.text.strip()
+        print(f"Job submitted successfully. Job ID: {job_id}")
+
+        start_time = time.time()
+        while True:
+            if (time.time() - start_time) > timeout:
+                return {"error": "Processing timeout exceeded"}
+
+            status_res = requests.get(f"{BASE_URL}/status/{job_id}", timeout=10)
+            status = status_res.text.strip()
+
+            if status == "FINISHED":
+                break
+            if status in ["ERROR", "FAILURE"]:
+                return {"error": f"InterProScan job failed with status: {status}"}
+
+            time.sleep(10)
+
+        result_res = requests.get(f"{BASE_URL}/result/{job_id}/json", timeout=10)
+        if result_res.status_code == 200:
+            return result_res.json()
+        return {"error": f"Failed to fetch results: {result_res.status_code}", "msg": result_res.text}
+
     except Exception as e:
         return {"error": str(e)}
+
+
+def parse_interpro_matches(interpro_json: dict) -> list[dict]:
+    """Flatten InterProScan JSON into a list of annotated matches."""
+    parsed = []
+    results = interpro_json.get("results", [])
+
+    for seq_result in results:
+        sequence = seq_result.get("sequence", "")
+        matches = seq_result.get("matches", [])
+
+        for match in matches:
+            signature = match.get("signature", {}) or {}
+            entry = match.get("entry", {}) or {}
+            accession = entry.get("accession") or signature.get("accession") or match.get("model-ac") or "N/A"
+            name = entry.get("name") or signature.get("name") or accession
+            description = entry.get("description") or signature.get("description")
+            domain_type = entry.get("type") or signature.get("type") or match.get("type") or "UNKNOWN"
+
+            for loc in match.get("locations", []):
+                parsed.append({
+                    "sequence": sequence,
+                    "accession": accession,
+                    "name": name,
+                    "description": description,
+                    "type": domain_type,
+                    "start": loc.get("start"),
+                    "end": loc.get("end"),
+                    "evalue": match.get("evalue", loc.get("evalue")),
+                    "score": match.get("score", loc.get("score")),
+                    "signature_library": signature.get("signatureLibraryRelease", {}).get("library"),
+                })
+
+    return parsed
+
 
 # Extract sequences for top windows from first few samples
 print("=== InterPro Domain Comparison for High-Attribution Regions ===\n")
@@ -947,50 +1015,53 @@ interpro_results = []
 for sample_idx in range(min(3, len(all_attributions))):  # analyze first 3 samples
     attrs = all_attributions[sample_idx]
     windows = top_k_windows(attrs, k=3)  # top 3 windows
-    
+
     # Get original protein sequence for this sample
     orig_idx = val_idx[high_conf_idx[sample_idx]]
     protein_seq = df.loc[orig_idx, "protein_seq"]
-    
+
     print(f"Sample {sample_idx} (TF confidence: {all_proba_esm_arr[high_conf_idx[sample_idx]]:.3f})")
     print(f"  Protein sequence length: {len(protein_seq)}")
-    
+
     for win_start, win_end, score in windows:
         # Extract window sequence (handle tokenization)
         # Note: ESM2 uses BOS/EOS tokens, so map token positions back to original sequence
         # For simplicity, use approximate mapping (token_pos ≈ aa_pos for ESM2)
-        
         win_start_adj = max(0, win_start - 1)  # account for BOS token
-        win_end_adj   = min(len(protein_seq), win_end - 1)
-        
+        win_end_adj = min(len(protein_seq), win_end - 1)
+
         if win_end_adj > win_start_adj:
             window_seq = protein_seq[win_start_adj:win_end_adj]
-            
             print(f"    Window [{win_start_adj}-{win_end_adj}] (attr={score:.6f}): {window_seq[:20]}...")
-            
-            # Query InterPro
-            domains = query_interpro_domains(window_seq, timeout=5)
-            
-            if "error" not in domains:
-                results = domains.get("results", [])
-                if results:
-                    print(f"      Found {len(results)} domain match(es):")
-                    for result in results[:2]:  # show top 2 matches
-                        db_name = result.get("metadata", {}).get("name", "Unknown")
-                        accession = result.get("metadata", {}).get("accession", "N/A")
-                        print(f"        - {db_name} ({accession})")
-                        interpro_results.append({
-                            "sample": sample_idx,
-                            "window_pos": f"{win_start_adj}-{win_end_adj}",
-                            "domain": db_name,
-                            "accession": accession,
-                            "attribution": score,
-                        })
-                else:
-                    print(f"      No domains found (but sequence is valid)")
+
+            # Query InterPro and parse the raw JSON response correctly
+            interpro_json = query_interpro_domains(window_seq, email="xyz@abc.com")
+
+            if "error" in interpro_json:
+                print(f"      InterPro query failed: {interpro_json['error']}")
+                continue
+
+            parsed_matches = parse_interpro_matches(interpro_json)
+            if parsed_matches:
+                print(f"      Found {len(parsed_matches)} match(es):")
+                for match in parsed_matches[:3]:  # show top 3 matches
+                    print(
+                        f"        - {match['name']} ({match['accession']}), "
+                        f"type={match['type']}, region={match['start']}-{match['end']}"
+                    )
+                    interpro_results.append({
+                        "sample": sample_idx,
+                        "window_pos": f"{win_start_adj}-{win_end_adj}",
+                        "domain": match["name"],
+                        "accession": match["accession"],
+                        "type": match["type"],
+                        "domain_start": match["start"],
+                        "domain_end": match["end"],
+                        "attribution": score,
+                    })
             else:
-                print(f"      InterPro query failed: {domains.get('error')}")
-    
+                print("      No domains found (but sequence is valid)")
+
     print()
 
 # Summary table of findings
@@ -1000,8 +1071,7 @@ if interpro_results:
     print(interpro_df.to_string(index=False))
 else:
     print("\nNo InterPro domains found in the queried sequences.")
-    print("(This may be expected for short windows or due to API rate limits.)")
-
+    print("(This may be expected for short windows, rate limits, or API service issues.)")
 
 # %% [markdown]
 # ![Attributions Bar Chart](figures/attribution_bar_chart.png)
@@ -1434,42 +1504,48 @@ feature_domain_mapping = []
 
 for feat_idx in important_features[:3]:  # analyze top 3 features (limit API calls)
     print(f"\nFeature {feat_idx} - Searching for domains in activating sequences...")
-    
+
     activation_scores = features_np[:, feat_idx]
     top_activators = np.argsort(activation_scores)[::-1][:2]  # top 2 samples
-    
+
     for sample_idx in top_activators:
         orig_idx = val_idx[sample_idx]
         protein_seq = df.loc[orig_idx, "protein_seq"]
         gene_symbol = df.loc[orig_idx, "symbol"]
         label_str = "TF" if sae_labels[sample_idx] == 1 else "non-TF"
-        
+
         # Query full sequence against InterPro (or a window if sequence is very long)
         query_seq = protein_seq[:500] if len(protein_seq) > 500 else protein_seq
-        
+
         print(f"  → {gene_symbol} ({label_str}, len={len(protein_seq)})")
-        
-        domains = query_interpro_domains(query_seq, timeout=5)
-        
-        if "error" not in domains:
-            results = domains.get("results", [])
-            if results:
-                print(f"    Found {len(results)} domain match(es):")
-                for result in results[:2]:
-                    db_name = result.get("metadata", {}).get("name", "Unknown")
-                    accession = result.get("metadata", {}).get("accession", "N/A")
-                    print(f"      • {db_name} ({accession})")
-                    feature_domain_mapping.append({
-                        "feature_idx": feat_idx,
-                        "gene": gene_symbol,
-                        "is_tf": sae_labels[sample_idx],
-                        "domain": db_name,
-                        "accession": accession,
-                    })
-            else:
-                print(f"    No known domains found")
+
+        # Use the corrected InterProScan wrapper and pass the required email argument
+        interpro_json = query_interpro_domains(query_seq, email="xyz@abc.com", timeout=5)
+
+        if "error" in interpro_json:
+            print(f"    InterPro query failed: {interpro_json['error']}")
+            continue
+
+        parsed_matches = parse_interpro_matches(interpro_json)
+        if parsed_matches:
+            print(f"    Found {len(parsed_matches)} match(es):")
+            for match in parsed_matches[:3]:
+                print(
+                    f"      • {match['name']} ({match['accession']}), "
+                    f"type={match['type']}, region={match['start']}-{match['end']}"
+                )
+                feature_domain_mapping.append({
+                    "feature_idx": feat_idx,
+                    "gene": gene_symbol,
+                    "is_tf": sae_labels[sample_idx],
+                    "domain": match["name"],
+                    "accession": match["accession"],
+                    "type": match["type"],
+                    "domain_start": match["start"],
+                    "domain_end": match["end"],
+                })
         else:
-            print(f"    InterPro query failed: {domains.get('error')}")
+            print("    No known domains found")
 
 if feature_domain_mapping:
     print("\n" + "="*60)
