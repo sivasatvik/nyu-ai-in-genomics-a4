@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 import torch
 import sys
+import requests
 import torch.nn as nn
 from peft import LoraConfig, TaskType, get_peft_model
 from transformers import AutoModel, AutoTokenizer
@@ -155,14 +156,14 @@ print(f"Test class distribution:  {np.bincount(y_test)}")
 # ## 1.2 LoRA Adapter Fine-Tuning (NT, Evo-2, ESM2)
 
 # %%
-# Download model snapshot from Hugging Face Hub
+# Download model snapshot from Hugging Face Hub (optional - removes if models already available)
 from huggingface_hub import snapshot_download
 local_dir = "./models/nucleotide-transformer-500m-human-ref"
 if not Path(local_dir).exists():
     snapshot_download(repo_id="InstaDeepAI/nucleotide-transformer-500m-human-ref", local_dir=local_dir)
-local_dir = "./models/esm2_t33_650M_UR50D"
+local_dir = "./models/esm2_t12_35M_UR50D"
 if not Path(local_dir).exists():
-    snapshot_download(repo_id="facebook/esm2_t33_650M_UR50D", local_dir=local_dir)
+    snapshot_download(repo_id="facebook/esm2_t12_35M_UR50D", local_dir=local_dir)
 
 # %%
 from dataclasses import dataclass
@@ -175,6 +176,7 @@ print(f"Using device: {device}")
 DATA_DIR = Path("data")
 
 # Models to run
+# NOTE: We must finetune at least one nucleotide model (NT) and one aminoacid model (ESM2/Evo2)
 FAST_RUN      = False
 RUN_NT_LORA   = True
 RUN_ESM2_LORA = True
@@ -907,6 +909,101 @@ plt.close(fig)
 print(f"[INFO] Saved figure: {fig_path}")
 
 # %% [markdown]
+# ### 2.1.1b Known TF Domain Comparison (InterPro)
+# 
+# For the high-attribution regions identified above, we compare against known protein domains using the **InterPro** API. Since we're analyzing ESM2 (protein) attributions, InterPro is more appropriate than JASPAR (which is for nucleotide motifs). This helps validate whether high-attribution regions correspond to known DNA-binding domains or other functional domains characteristic of transcription factors.
+# 
+
+# %%
+# ── Compare top-attribution windows against known TF domains (InterPro) ──────
+# Extract actual protein sequences for the high-attribution windows
+# and look them up in InterPro for known protein domains
+
+def query_interpro_domains(sequence: str, timeout: int = 10) -> dict:
+    """
+    Query InterPro API to identify protein domains in a sequence.
+    Returns a dict with domain annotations.
+    """
+    import requests
+    import time
+    
+    url = "https://www.ebi.ac.uk/interpro/api/protein/matched"
+    params = {"sequence": sequence}
+    
+    try:
+        response = requests.get(url, params=params, timeout=timeout)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {"error": f"HTTP {response.status_code}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+# Extract sequences for top windows from first few samples
+print("=== InterPro Domain Comparison for High-Attribution Regions ===\n")
+
+interpro_results = []
+
+for sample_idx in range(min(3, len(all_attributions))):  # analyze first 3 samples
+    attrs = all_attributions[sample_idx]
+    windows = top_k_windows(attrs, k=3)  # top 3 windows
+    
+    # Get original protein sequence for this sample
+    orig_idx = val_idx[high_conf_idx[sample_idx]]
+    protein_seq = df.loc[orig_idx, "protein_seq"]
+    
+    print(f"Sample {sample_idx} (TF confidence: {all_proba_esm_arr[high_conf_idx[sample_idx]]:.3f})")
+    print(f"  Protein sequence length: {len(protein_seq)}")
+    
+    for win_start, win_end, score in windows:
+        # Extract window sequence (handle tokenization)
+        # Note: ESM2 uses BOS/EOS tokens, so map token positions back to original sequence
+        # For simplicity, use approximate mapping (token_pos ≈ aa_pos for ESM2)
+        
+        win_start_adj = max(0, win_start - 1)  # account for BOS token
+        win_end_adj   = min(len(protein_seq), win_end - 1)
+        
+        if win_end_adj > win_start_adj:
+            window_seq = protein_seq[win_start_adj:win_end_adj]
+            
+            print(f"    Window [{win_start_adj}-{win_end_adj}] (attr={score:.6f}): {window_seq[:20]}...")
+            
+            # Query InterPro
+            domains = query_interpro_domains(window_seq, timeout=5)
+            
+            if "error" not in domains:
+                results = domains.get("results", [])
+                if results:
+                    print(f"      Found {len(results)} domain match(es):")
+                    for result in results[:2]:  # show top 2 matches
+                        db_name = result.get("metadata", {}).get("name", "Unknown")
+                        accession = result.get("metadata", {}).get("accession", "N/A")
+                        print(f"        - {db_name} ({accession})")
+                        interpro_results.append({
+                            "sample": sample_idx,
+                            "window_pos": f"{win_start_adj}-{win_end_adj}",
+                            "domain": db_name,
+                            "accession": accession,
+                            "attribution": score,
+                        })
+                else:
+                    print(f"      No domains found (but sequence is valid)")
+            else:
+                print(f"      InterPro query failed: {domains.get('error')}")
+    
+    print()
+
+# Summary table of findings
+if interpro_results:
+    interpro_df = pd.DataFrame(interpro_results)
+    print("\nSummary of InterPro Domain Annotations:")
+    print(interpro_df.to_string(index=False))
+else:
+    print("\nNo InterPro domains found in the queried sequences.")
+    print("(This may be expected for short windows or due to API rate limits.)")
+
+
+# %% [markdown]
 # ![Attributions Bar Chart](figures/attribution_bar_chart.png)
 
 # %% [markdown]
@@ -1222,15 +1319,242 @@ print(f"[INFO] Saved figure: {fig_path}")
 # In the above heatmaps, we can see that certain SAE features are consistently more active in non-TF samples compared to TF samples, and vice versa. This suggests that the SAE has learned to capture some underlying patterns that differentiate TFs from non-TFs. To determine if these features correspond to known protein domains, we could analyze the sequences that strongly activate each feature and perform motif enrichment analysis or compare them against databases of protein domains (e.g., Pfam). Additionally, we could investigate if the top SAE features align with the high-attribution regions identified by IG and attention analyses, which would provide further evidence that these features are biologically meaningful and relevant to the model's predictions.
 
 # %%
-# ── Compare SAE features to IG attributions ──────────────────────────────────
+# ── Compare SAE features to IG attributions and Attention results ────────────
 # For each of the SAE samples that also appear in our IG sample set,
 # compare the most active SAE feature against the IG top window.
 
-print("SAE vs IG comparison (qualitative):")
-for i in range(min(5, len(sae_labels))):
+print("=== Comparing SAE Features to IG Attributions & Attention Results ===\n")
+
+print("1. Qualitative SAE vs IG Comparison:")
+print("-" * 60)
+
+# Find overlap between SAE sample indices and IG sample indices
+overlap_samples = min(5, len(sae_labels), len(all_attributions))
+
+for i in range(overlap_samples):
     top_sae_feat = np.argsort(features_np[i])[::-1][:5]
     label_str = "TF" if sae_labels[i] == 1 else "non-TF"
-    print(f"  Sample {i} ({label_str}) — top SAE features: {top_sae_feat}")
+    
+    print(f"\nSample {i} ({label_str}):")
+    print(f"  Top 5 SAE features: {top_sae_feat}")
+    print(f"  Top SAE activation: {features_np[i, top_sae_feat[0]]:.4f}")
+    
+    # Get IG attribution info for this sample
+    if i < len(all_attributions):
+        attrs = all_attributions[i]
+        top_attr_windows = top_k_windows(attrs, k=3)
+        print(f"  IG top attribution window positions: {[f'{w[0]}-{w[1]}' for w in top_attr_windows]}")
+        print(f"  IG top attribution score: {top_attr_windows[0][2]:.6f}")
+        
+        # Get attention info
+        if i < len(attention_maps):
+            top_heads = select_top_heads(attention_maps[i])
+            avg_attn = attention_maps[i][top_heads].mean(axis=0).mean(axis=1)[:64]
+            top_attn_pos = np.argsort(avg_attn)[::-1][:3]
+            print(f"  Attention peak positions: {list(top_attn_pos)}")
+            print(f"  Attention peak value: {avg_attn[top_attn_pos[0]]:.6f}")
+
+print("\n" + "="*60)
+print("2. Quantitative Analysis: SAE-IG Alignment")
+print("="*60)
+
+# For samples where all three methods are available, check if they highlight similar regions
+alignment_scores = []
+
+for i in range(overlap_samples):
+    if i < len(all_attributions) and i < len(attention_maps):
+        # Check if top SAE features align with top IG attribution regions
+        attrs = all_attributions[i]
+        top_attr_windows = top_k_windows(attrs, k=1)
+        ig_window_start = top_attr_windows[0][0]
+        ig_window_end = top_attr_windows[0][1]
+        
+        # Also check attention
+        top_heads = select_top_heads(attention_maps[i])
+        avg_attn = attention_maps[i][top_heads].mean(axis=0).mean(axis=1)[:64]
+        attn_peak_pos = np.argmax(avg_attn)
+        
+        is_tf = "TF" if sae_labels[i] == 1 else "non-TF"
+        
+        alignment_scores.append({
+            "sample": i,
+            "label": is_tf,
+            "top_sae_feature": np.argsort(features_np[i])[::-1][0],
+            "top_sae_activation": features_np[i, np.argsort(features_np[i])[::-1][0]],
+            "ig_window_start": ig_window_start,
+            "ig_window_end": ig_window_end,
+            "ig_max_attribution": top_attr_windows[0][2],
+            "attention_peak_pos": attn_peak_pos,
+            "attention_peak_val": avg_attn[attn_peak_pos],
+        })
+
+if alignment_scores:
+    alignment_df = pd.DataFrame(alignment_scores)
+    print("\nSummary: Position of peaks in each method")
+    print(alignment_df.to_string(index=False))
+
+print("\n" + "="*60)
+print("3. Interpretation: Do the methods agree?")
+print("="*60)
+print("""
+✓ HIGH AGREEMENT (IG, Attention, SAE highlight same region):
+  → Strong evidence that this is a real biological pattern
+  → Model consistently identifies this region as important
+  → Feature likely captures meaningful TF structure
+
+△ PARTIAL AGREEMENT (2 out of 3 methods agree):
+  → May reflect complementary information sources
+  → IG captures gradient-based importance (what changes output most)
+  → Attention captures learned focus patterns
+  → SAE captures learned feature decomposition
+  → Disagreement is informative - different perspectives
+
+✗ LOW/NO AGREEMENT:
+  → Methods see different patterns
+  → Could indicate:
+    - Abstract features (SAE) vs. direct importance (IG)
+    - Attention may attend to padding tokens
+    - SAE may capture nuanced patterns IG misses
+  → Suggests need for manual inspection
+""")
+
+# %%
+# ── Map SAE features to InterPro domains ──────────────────────────────────────
+# For each important SAE feature, query InterPro for sequences that activate it
+
+# Define important features if not already defined
+if 'important_features' not in locals():
+    important_features = top10_tf[:5]  # focus on top 5 TF features
+
+print("\n" + "="*60)
+print("SAE Feature to Known Domain Mapping (via InterPro)")
+print("="*60 + "\n")
+
+feature_domain_mapping = []
+
+for feat_idx in important_features[:3]:  # analyze top 3 features (limit API calls)
+    print(f"\nFeature {feat_idx} - Searching for domains in activating sequences...")
+    
+    activation_scores = features_np[:, feat_idx]
+    top_activators = np.argsort(activation_scores)[::-1][:2]  # top 2 samples
+    
+    for sample_idx in top_activators:
+        orig_idx = val_idx[sample_idx]
+        protein_seq = df.loc[orig_idx, "protein_seq"]
+        gene_symbol = df.loc[orig_idx, "symbol"]
+        label_str = "TF" if sae_labels[sample_idx] == 1 else "non-TF"
+        
+        # Query full sequence against InterPro (or a window if sequence is very long)
+        query_seq = protein_seq[:500] if len(protein_seq) > 500 else protein_seq
+        
+        print(f"  → {gene_symbol} ({label_str}, len={len(protein_seq)})")
+        
+        domains = query_interpro_domains(query_seq, timeout=5)
+        
+        if "error" not in domains:
+            results = domains.get("results", [])
+            if results:
+                print(f"    Found {len(results)} domain match(es):")
+                for result in results[:2]:
+                    db_name = result.get("metadata", {}).get("name", "Unknown")
+                    accession = result.get("metadata", {}).get("accession", "N/A")
+                    print(f"      • {db_name} ({accession})")
+                    feature_domain_mapping.append({
+                        "feature_idx": feat_idx,
+                        "gene": gene_symbol,
+                        "is_tf": sae_labels[sample_idx],
+                        "domain": db_name,
+                        "accession": accession,
+                    })
+            else:
+                print(f"    No known domains found")
+        else:
+            print(f"    InterPro query failed: {domains.get('error')}")
+
+if feature_domain_mapping:
+    print("\n" + "="*60)
+    print("Feature-Domain Summary Table:")
+    print("="*60)
+    feature_domain_df = pd.DataFrame(feature_domain_mapping)
+    print(feature_domain_df.to_string(index=False))
+else:
+    print("\nNo InterPro domain mappings found.")
+    print("This may be expected if features capture abstract patterns not matching annotated domains.")
+
+# %%
+# ── Interpret SAE features by analyzing which sequences activate them ────────────
+# For each important feature, find which training sequences activate it most strongly,
+# then look for common patterns (e.g., enriched amino acids, structural properties)
+
+print("=== SAE Feature Interpretation ===\n")
+
+# Analyze top TF-activating features
+important_features = top10_tf[:5]  # focus on top 5 TF features
+
+for feat_idx in important_features:
+    print(f"\nFeature {feat_idx} (more active in TFs):")
+    print(f"  Avg activation (TF): {tf_mean[feat_idx]:.4f}")
+    print(f"  Avg activation (non-TF): {non_tf_mean[feat_idx]:.4f}")
+    print(f"  Difference: {diff[feat_idx]:.4f}")
+    
+    # Find samples that activate this feature most strongly
+    activation_scores = features_np[:, feat_idx]
+    top_activators = np.argsort(activation_scores)[::-1][:3]  # top 3 samples
+    
+    print(f"  Top activating samples:")
+    for rank, sample_idx in enumerate(top_activators):
+        label_str = "TF" if sae_labels[sample_idx] == 1 else "non-TF"
+        activation_val = activation_scores[sample_idx]
+        
+        # Get the original protein sequence for this sample
+        orig_idx = val_idx[sample_idx]
+        protein_seq = df.loc[orig_idx, "protein_seq"]
+        gene_symbol = df.loc[orig_idx, "symbol"]
+        
+        print(f"    {rank+1}. Sample {sample_idx} ({gene_symbol}, {label_str}): "
+              f"activation={activation_val:.4f}, seq_len={len(protein_seq)}")
+        
+        # Analyze amino acid composition in top 200 aa of sequence
+        window = protein_seq[:200] if len(protein_seq) > 200 else protein_seq
+        aa_counts = {}
+        for aa in set(window):
+            aa_counts[aa] = window.count(aa) / len(window)
+        
+        # Find enriched amino acids (compared to average)
+        avg_freq = 1.0 / 20  # rough average for 20 amino acids
+        enriched = {aa: freq for aa, freq in sorted(aa_counts.items(), 
+                                                     key=lambda x: x[1], reverse=True)[:3]}
+        print(f"       Enriched AAs: {enriched}")
+
+print("\n" + "="*60)
+print("Feature Interpretation Strategy:")
+print("="*60)
+print("""
+1. **Amino Acid Enrichment**: Look for enriched amino acids (C, H, P, E, K)
+   - C (Cysteine) → Zinc finger motifs
+   - H (Histidine) → Zinc finger motifs
+   - K (Lysine), E (Glutamic acid) → Basic regions (DNA binding)
+   - P (Proline) → Turns in helical structures
+
+2. **Query InterPro for sequences that activate each feature**:
+   - Extract top-activating sequences
+   - Search for known domains (done in section 2.1.1b)
+
+3. **Compare to IG/Attention results**:
+   - Do high-IG regions correspond to high-SAE feature activation?
+   - If yes → suggests feature captures real biological patterns
+""")
+
+
+# %% [markdown]
+# ---
+# 
+# ### 2.1.3b SAE Feature Interpretation: Understanding What Features Represent
+# 
+# **Challenge**: SAE features are just numbers (indices 1525, 1664, etc.). How do we know what they represent biologically?
+# 
+# **Solution**: Analyze which sequences **activate** each important feature, identify patterns, and query biological databases.
+# 
 
 # %% [markdown]
 # SAE vs IG comparison (qualitative):
