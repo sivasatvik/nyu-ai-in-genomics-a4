@@ -922,7 +922,7 @@ print(f"[INFO] Saved figure: {fig_path}")
 
 import time
 
-def query_interpro_domains(sequence: str, email: str, timeout: int = 300) -> dict:
+def query_interpro_domains(sequence: str, email: str, timeout: int = 600) -> dict:
     """
     Query InterProScan 5 API asynchronously.
     Requires an email address per EBI usage policy.
@@ -940,7 +940,7 @@ def query_interpro_domains(sequence: str, email: str, timeout: int = 300) -> dic
                 "goterms": "false",
                 "pathways": "false",
             },
-            timeout=10,
+            timeout=600,
         )
 
         if submit_res.status_code != 200:
@@ -954,7 +954,7 @@ def query_interpro_domains(sequence: str, email: str, timeout: int = 300) -> dic
             if (time.time() - start_time) > timeout:
                 return {"error": "Processing timeout exceeded"}
 
-            status_res = requests.get(f"{BASE_URL}/status/{job_id}", timeout=10)
+            status_res = requests.get(f"{BASE_URL}/status/{job_id}", timeout=600)
             status = status_res.text.strip()
 
             if status == "FINISHED":
@@ -964,7 +964,7 @@ def query_interpro_domains(sequence: str, email: str, timeout: int = 300) -> dic
 
             time.sleep(10)
 
-        result_res = requests.get(f"{BASE_URL}/result/{job_id}/json", timeout=10)
+        result_res = requests.get(f"{BASE_URL}/result/{job_id}/json", timeout=600)
         if result_res.status_code == 200:
             return result_res.json()
         return {"error": f"Failed to fetch results: {result_res.status_code}", "msg": result_res.text}
@@ -1035,7 +1035,7 @@ for sample_idx in range(min(3, len(all_attributions))):  # analyze first 3 sampl
             print(f"    Window [{win_start_adj}-{win_end_adj}] (attr={score:.6f}): {window_seq[:20]}...")
 
             # Query InterPro and parse the raw JSON response correctly
-            interpro_json = query_interpro_domains(window_seq, email="abc" + str(sample_idx) + "@abc.com")
+            interpro_json = query_interpro_domains(window_seq, email="abcd" + str(sample_idx) + "@abc.com")
 
             if "error" in interpro_json:
                 print(f"      InterPro query failed: {interpro_json['error']}")
@@ -1520,7 +1520,7 @@ for feat_idx in important_features[:3]:  # analyze top 3 features (limit API cal
         print(f"  → {gene_symbol} ({label_str}, len={len(protein_seq)})")
 
         # Use the corrected InterProScan wrapper and pass the required email argument
-        interpro_json = query_interpro_domains(query_seq, email="abc" + str(sample_idx) + "@abc.com")
+        interpro_json = query_interpro_domains(query_seq, email="abcd" + str(sample_idx) + "@abc.com")
 
         if "error" in interpro_json:
             print(f"    InterPro query failed: {interpro_json['error']}")
