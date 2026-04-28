@@ -966,6 +966,7 @@ def query_interpro_domains(sequence: str, email: str, timeout: int = 600) -> dic
 
         result_res = requests.get(f"{BASE_URL}/result/{job_id}/json", timeout=600)
         if result_res.status_code == 200:
+            print(f"Raw InterProScan result: {json.dumps(result_res.json(), indent=2)}")  # Debugging line
             return result_res.json()
         return {"error": f"Failed to fetch results: {result_res.status_code}", "msg": result_res.text}
 
@@ -983,6 +984,7 @@ def parse_interpro_matches(interpro_json: dict) -> list[dict]:
         matches = seq_result.get("matches", [])
 
         for match in matches:
+            print(f"Raw match data: {json.dumps(match, indent=2)}")  # Debugging line
             signature = match.get("signature", {}) or {}
             entry = match.get("entry", {}) or {}
             accession = entry.get("accession") or signature.get("accession") or match.get("model-ac") or "N/A"
