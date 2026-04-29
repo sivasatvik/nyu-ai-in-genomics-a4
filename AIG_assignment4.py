@@ -394,22 +394,33 @@ if RUN_NT_LORA:
 # 
 #   Epoch 3/10 | Train Loss: 0.4163 | Val Loss: 0.6002
 # 
-#   Epoch 4/10 | Train Loss: 0.2905 | Val Loss: 0.7050
+#   Epoch 4/10 | Train Loss: 0.2906 | Val Loss: 0.7197
 # 
-#   Epoch 5/10 | Train Loss: 0.1851 | Val Loss: 0.7646
+#   Epoch 5/10 | Train Loss: 0.1895 | Val Loss: 0.7137
 # 
-#   Epoch 6/10 | Train Loss: 0.1322 | Val Loss: 1.3166
+#   Epoch 6/10 | Train Loss: 0.1240 | Val Loss: 1.1526
 # 
-#   Epoch 7/10 | Train Loss: 0.1424 | Val Loss: 0.7929
+#   Epoch 7/10 | Train Loss: 0.0936 | Val Loss: 1.0740
 # 
-#   Epoch 8/10 | Train Loss: 0.0968 | Val Loss: 1.0348
+#   Epoch 8/10 | Train Loss: 0.1672 | Val Loss: 1.0639
 # 
-#   Epoch 9/10 | Train Loss: 0.0789 | Val Loss: 1.0746
+#   Epoch 9/10 | Train Loss: 0.0914 | Val Loss: 1.1160
 # 
-#   Epoch 10/10 | Train Loss: 0.0748 | Val Loss: 1.1656
+#   Epoch 10/10 | Train Loss: 0.1119 | Val Loss: 0.9233
 # 
+# NT LoRA Validation Metrics: 
 # 
-# NT LoRA Validation Metrics: accuracy: 0.7600, precision: 0.8197, recall: 0.6667, f1: 0.7353, roc_auc: 0.8148, prc_auc: 0.8195
+# accuracy: 0.7667 
+# 
+# precision: 0.7857
+# 
+# recall: 0.7333
+# 
+# f1: 0.7586
+# 
+# roc_auc: 0.8158
+# 
+# prc_auc: 0.8214
 
 # %% [markdown]
 # ### 1.2.3 ESM2 LoRA (protein)
@@ -537,7 +548,19 @@ if RUN_ESM2_LORA:
 # 
 #   Epoch 10/10 | Train Loss: 0.0801 | Val Loss: 0.4426
 # 
-# ESM2 LoRA Validation Metrics: accuracy: 0.8533, precision: 0.8354, recall: 0.8800, f1: 0.8571, roc_auc: 0.9470, prc_auc: 0.9413
+# ESM2 LoRA Validation Metrics:
+# 
+# accuracy: 0.8533,
+# 
+# precision: 0.8354,
+# 
+# recall: 0.8800,
+# 
+# f1: 0.8571,
+# 
+# roc_auc: 0.9470,
+# 
+# prc_auc: 0.9413
 
 # %% [markdown]
 # ---
@@ -570,7 +593,7 @@ print(comparison_df.to_string())
 # |------------|-----------|-----------|-----------|----------|----------|----------|
 # | NT_frozen  |  0.584500 |  0.581200 |  0.592300 | 0.583200 | 0.628200 |  0.607700 |
 # | ESM2_frozen|  0.582700 |  0.578400 |  0.580200 | 0.582200 | 0.609900 |  0.592900 |
-# | NT_LoRA    |  0.760000 |  0.819672 |  0.666667 | 0.735294 | 0.814756 |  0.819454 |
+# | NT_LoRA    |  0.766667 |  0.785714 |  0.733333 | 0.758621 | 0.815822 |  0.821422 |
 # | ESM2_LoRA  |  0.853333 |  0.835443 |  0.880000 | 0.857143 | 0.947022 |  0.941252 |
 
 # %%
@@ -875,6 +898,9 @@ for i, attrs in enumerate(all_attributions[:5]):
 #   
 #   Sample 4: [(0, 30, 0.005426976657084501), (1, 31, 0.005429855881569288), (2, 32, 0.004790489288279787), (3, 33, 0.003919008903903886), (5, 35, 0.0035609287529950956)]
 
+# %% [markdown]
+# The top attribution windows for the first sample show a cluster of high scores around 475–505, which may indicate a biologically relevant motif or domain in the protein sequence. There are other high-attribution windows at the beginning of the sequence (0–30) in other samples, which could suggest the presence of signal peptides or other N-terminal features. Species-specific patterns might emerge if certain motifs are conserved in specific taxa, so it would be interesting to analyze the taxonomic distribution of the samples and see if high-attribution regions correlate with particular evolutionary lineages.
+
 # %%
 # ── Sequence logo for the highest-attribution window of the first sample ─────
 import logomaker
@@ -909,11 +935,14 @@ plt.close(fig)
 print(f"[INFO] Saved figure: {fig_path}")
 
 # %% [markdown]
+# ![Attributions Bar Chart](figures/attribution_bar_chart.png)
+
+# %% [markdown]
 # ### 2.1.1b Known TF Domain Comparison (InterPro)
 # 
 # For the high-attribution regions identified above, we compare against known protein domains using the **InterPro** API. Since we're analyzing ESM2 (protein) attributions, InterPro is more appropriate than JASPAR (which is for nucleotide motifs). This helps validate whether high-attribution regions correspond to known DNA-binding domains or other functional domains characteristic of transcription factors.
 # 
-# **Note**: InterPro API queries may occasionally timeout or fail due to rate limiting. If you see errors, the system will gracefully handle them and report the issue. For production use, consider installing a local InterPro database or using batch search functionality.
+# **Note**: InterPro API queries occasionally gave me timeouts or failures. I was able to query what I can to get the domain details.
 
 # %%
 # ── Compare top-attribution windows against known TF domains (InterPro) ──────
@@ -966,7 +995,7 @@ def query_interpro_domains(sequence: str, email: str, timeout: int = 600) -> dic
 
         result_res = requests.get(f"{BASE_URL}/result/{job_id}/json", timeout=600)
         if result_res.status_code == 200:
-            print(f"Raw InterProScan result: {json.dumps(result_res.json(), indent=2)}")  # Debugging line
+            # print(f"Raw InterProScan result: {json.dumps(result_res.json(), indent=2)}")  # Debugging line
             return result_res.json()
         return {"error": f"Failed to fetch results: {result_res.status_code}", "msg": result_res.text}
 
@@ -984,7 +1013,7 @@ def parse_interpro_matches(interpro_json: dict) -> list[dict]:
         matches = seq_result.get("matches", [])
 
         for match in matches:
-            print(f"Raw match data: {json.dumps(match, indent=2)}")  # Debugging line
+            # print(f"Raw match data: {json.dumps(match, indent=2)}")  # Debugging line
             signature = match.get("signature", {}) or {}
             entry = match.get("entry", {}) or {}
             accession = entry.get("accession") or signature.get("accession") or match.get("model-ac") or "N/A"
@@ -1076,10 +1105,18 @@ else:
     print("(This may be expected for short windows, rate limits, or API service issues.)")
 
 # %% [markdown]
-# ![Attributions Bar Chart](figures/attribution_bar_chart.png)
-
-# %% [markdown]
-# The top attribution windows for the first sample show a cluster of high scores around 475–505, which may indicate a biologically relevant motif or domain in the protein sequence. To determine if these regions correspond to known domains, we could cross-reference the high-attribution positions with databases of protein motifs (e.g., Pfam) or perform a BLAST search to find similar sequences with annotated functions. There are other high-attribution windows at the beginning of the sequence (0–30) in other samples, which could suggest the presence of signal peptides or other N-terminal features. Species-specific patterns might emerge if certain motifs are conserved in specific taxa, so it would be interesting to analyze the taxonomic distribution of the samples and see if high-attribution regions correlate with particular evolutionary lineages.
+# Summary of InterPro Domain Annotations:
+# | sample | window_pos |  domain  |  accession  |  type | domain_start | domain_end | attribution |
+# |--------|------------|----------|-------------|-------|--------------|------------|-------------|
+# |    0   | 475-505 | disorder_prediction | mobidb-lite | REGION       |  1  | 30  |  0.009548 |
+# |    1   |   0-29  | disorder_prediction | mobidb-lite | REGION       |  19 | 29  |  0.007542 |
+# |    1   |   0-29  | disorder_prediction | mobidb-lite | REGION       |   1 | 29  |  0.007542 |
+# |    1   |   0-30  | disorder_prediction | mobidb-lite | REGION       |  19 | 30  |  0.007586 |
+# |    1   |   0-30  | disorder_prediction | mobidb-lite | REGION       |   1 | 30  |  0.007586 |
+# |    1   |   1-31  | disorder_prediction | mobidb-lite | REGION       |   1 | 30  |  0.004682 |
+# |    2   |   0-30  | disorder_prediction | mobidb-lite | REGION       |   1 | 30  |  0.024075 |
+# 
+# The InterPro domain comparison revealed that the high-attribution windows identified by Integrated Gradients correspond to regions predicted to be disordered by the mobidb-lite tool. This suggests that the model may be focusing on intrinsically disordered regions of the protein, which are often involved in protein-protein interactions and can play important roles in transcription factor function. The presence of disorder predictions in the top attribution windows could indicate that the model is leveraging features associated with flexible regions of the protein that may facilitate binding to DNA or other regulatory proteins. However, it's important to note that these are predictions and further experimental validation would be needed to confirm the functional relevance of these regions.
 
 # %% [markdown]
 # ---
@@ -1163,6 +1200,7 @@ else:
 
 # %% [markdown]
 # ![Attention Weights](figures/attention_weights.png)
+# The attention heatmaps reveal distinct patterns of token interactions captured by the model. In most heads, we observe strong diagonal patterns, indicating that tokens are attending primarily to themselves or nearby positions, which may reflect local motif recognition. There are few positions which exhibit a bit more diffuse attention, potentially indicating regions where the model is integrating information across a broader context. The variability in attention patterns across samples suggests that the model may be leveraging different features or motifs depending on the specific sequence, which could be related to species-specific or function-specific characteristics of the transcription factors.
 
 # %%
 # ── Compare attention rollout vs IG attributions ────────────────────────────
@@ -1388,7 +1426,7 @@ print(f"[INFO] Saved figure: {fig_path}")
 
 # %% [markdown]
 # ![SAE Feature Activations](figures/sae_feature_activations.png)
-# In the above heatmaps, we can see that certain SAE features are consistently more active in non-TF samples compared to TF samples, and vice versa. This suggests that the SAE has learned to capture some underlying patterns that differentiate TFs from non-TFs. To determine if these features correspond to known protein domains, we could analyze the sequences that strongly activate each feature and perform motif enrichment analysis or compare them against databases of protein domains (e.g., Pfam). Additionally, we could investigate if the top SAE features align with the high-attribution regions identified by IG and attention analyses, which would provide further evidence that these features are biologically meaningful and relevant to the model's predictions.
+# In the above heatmaps, we can see that certain SAE features are consistently more active in non-TF samples compared to TF samples, and vice versa. This suggests that the SAE has learned to capture some underlying patterns that differentiate TFs from non-TFs. To determine if these features correspond to known protein domains, we could analyze the sequences that strongly activate each feature and perform motif enrichment analysis or compare them against databases of protein domains. Additionally, we could investigate if the top SAE features align with the high-attribution regions identified by IG and attention analyses, which would provide further evidence that these features are biologically meaningful and relevant to the model's predictions.
 
 # %%
 # ── Compare SAE features to IG attributions and Attention results ────────────
@@ -1465,104 +1503,21 @@ if alignment_scores:
     print("\nSummary: Position of peaks in each method")
     print(alignment_df.to_string(index=False))
 
-print("\n" + "="*60)
-print("3. Interpretation: Do the methods agree?")
-print("="*60)
-print("""
-✓ HIGH AGREEMENT (IG, Attention, SAE highlight same region):
-  → Strong evidence that this is a real biological pattern
-  → Model consistently identifies this region as important
-  → Feature likely captures meaningful TF structure
+# %% [markdown]
+# Summary: Position of peaks in each method
+# | sample | label | top_sae_feature | top_sae_activation | ig_window_start | ig_window_end | ig_max_attribution | attention_peak_pos | attention_peak_val |
+# |-----|------|------|------------|-------|------|-----------|------|-------------|
+# | 0   | TF   | 308  |  5.247669 |  477   |  507 |  0.009631 |  25  |  0.001953 |
+# | 1   | TF   | 1525 |  5.548427 | 1      |   31 |  0.007586 |  61  | 0.001953 |
+# | 2   | TF   | 477  |  9.030412 | 1      |  31     |   0.024075  |   2  |  0.001953 |
+# | 3   | TF   | 1450 |  7.312042 |      1 |  31      | 0.009579   |  19  |  0.001953 |
+# | 4   | TF   | 1837 |  10.370873 |     1 |    31  |   0.005430   |   22 |     0.001953 |
 
-△ PARTIAL AGREEMENT (2 out of 3 methods agree):
-  → May reflect complementary information sources
-  → IG captures gradient-based importance (what changes output most)
-  → Attention captures learned focus patterns
-  → SAE captures learned feature decomposition
-  → Disagreement is informative - different perspectives
-
-✗ LOW/NO AGREEMENT:
-  → Methods see different patterns
-  → Could indicate:
-    - Abstract features (SAE) vs. direct importance (IG)
-    - Attention may attend to padding tokens
-    - SAE may capture nuanced patterns IG misses
-  → Suggests need for manual inspection
-""")
-
-# %%
-# ── Map SAE features to InterPro domains ──────────────────────────────────────
-# For each important SAE feature, query InterPro for sequences that activate it
-
-# Define important features if not already defined
-# if 'important_features' not in locals():
-#     important_features = top10_tf[:5]  # focus on top 5 TF features
-
-# print("\n" + "="*60)
-# print("SAE Feature to Known Domain Mapping (via InterPro)")
-# print("="*60 + "\n")
-
-# feature_domain_mapping = []
-
-# for feat_idx in important_features[:3]:  # analyze top 3 features (limit API calls)
-#     print(f"\nFeature {feat_idx} - Searching for domains in activating sequences...")
-
-#     activation_scores = features_np[:, feat_idx]
-#     top_activators = np.argsort(activation_scores)[::-1][:2]  # top 2 samples
-
-#     for sample_idx in top_activators:
-#         orig_idx = val_idx[sample_idx]
-#         protein_seq = df.loc[orig_idx, "protein_seq"]
-#         gene_symbol = df.loc[orig_idx, "symbol"]
-#         label_str = "TF" if sae_labels[sample_idx] == 1 else "non-TF"
-
-#         # Query full sequence against InterPro (or a window if sequence is very long)
-#         query_seq = protein_seq[:500] if len(protein_seq) > 500 else protein_seq
-
-#         print(f"  → {gene_symbol} ({label_str}, len={len(protein_seq)})")
-
-#         # Use the corrected InterProScan wrapper and pass the required email argument
-#         interpro_json = query_interpro_domains(query_seq, email="abcde" + str(sample_idx) + "@abc.com")
-
-#         if "error" in interpro_json:
-#             print(f"    InterPro query failed: {interpro_json['error']}")
-#             continue
-
-#         parsed_matches = parse_interpro_matches(interpro_json)
-#         if parsed_matches:
-#             print(f"    Found {len(parsed_matches)} match(es):")
-#             for match in parsed_matches[:3]:
-#                 print(
-#                     f"      • {match['name']} ({match['accession']}), "
-#                     f"type={match['type']}, region={match['start']}-{match['end']}"
-#                 )
-#                 feature_domain_mapping.append({
-#                     "feature_idx": feat_idx,
-#                     "gene": gene_symbol,
-#                     "is_tf": sae_labels[sample_idx],
-#                     "domain": match["name"],
-#                     "accession": match["accession"],
-#                     "type": match["type"],
-#                     "domain_start": match["start"],
-#                     "domain_end": match["end"],
-#                 })
-#         else:
-#             print("    No known domains found")
-
-# if feature_domain_mapping:
-#     print("\n" + "="*60)
-#     print("Feature-Domain Summary Table:")
-#     print("="*60)
-#     feature_domain_df = pd.DataFrame(feature_domain_mapping)
-#     print(feature_domain_df.to_string(index=False))
-# else:
-#     print("\nNo InterPro domain mappings found.")
-#     print("This may be expected if features capture abstract patterns not matching annotated domains.")
+# %% [markdown]
+# I tried to search various databases to get the domain specific information for the top activated features. Based on that, I've written the domains next to the features activated below.
 
 # %%
 # ── Interpret SAE features by analyzing which sequences activate them ────────────
-# For each important feature, find which training sequences activate it most strongly,
-# then look for common patterns (e.g., enriched amino acids, structural properties)
 
 print("=== SAE Feature Interpretation ===\n")
 
@@ -1604,51 +1559,111 @@ for feat_idx in important_features:
                                                      key=lambda x: x[1], reverse=True)[:3]}
         print(f"       Enriched AAs: {enriched}")
 
-print("\n" + "="*60)
-print("Feature Interpretation Strategy:")
-print("="*60)
-print("""
-1. **Amino Acid Enrichment**: Look for enriched amino acids (C, H, P, E, K)
-   - C (Cysteine) → Zinc finger motifs
-   - H (Histidine) → Zinc finger motifs
-   - K (Lysine), E (Glutamic acid) → Basic regions (DNA binding)
-   - P (Proline) → Turns in helical structures
-
-2. **Query InterPro for sequences that activate each feature**:
-   - Extract top-activating sequences
-   - Search for known domains (done in section 2.1.1b)
-
-3. **Compare to IG/Attention results**:
-   - Do high-IG regions correspond to high-SAE feature activation?
-   - If yes → suggests feature captures real biological patterns
-""")
-
 
 # %% [markdown]
-# ---
 # 
-# ### 2.1.3b SAE Feature Interpretation: Understanding What Features Represent
+# #### SAE Feature Interpretation
 # 
-# **Challenge**: SAE features are just numbers (indices 1525, 1664, etc.). How do we know what they represent biologically?
+# ##### Feature 1525 (CXADR - cell adhesion molecule)
+# **More active in TFs** | **Difference: 2.6220**
 # 
-# **Solution**: Analyze which sequences **activate** each important feature, identify patterns, and query biological databases.
+# | Metric | Value |
+# |--------|-------|
+# | Avg activation (TF) | 3.5428 |
+# | Avg activation (non-TF) | 0.9208 |
+# | Difference | 2.6220 |
 # 
+# **Top Activating Sequences:**
+# 
+# | Rank | Gene | Type | Activation | Length | Top AAs |
+# |------|------|------|------------|--------|---------|
+# | 1 | PTS | TF | 5.5898 | 145 | V (12.41%), K (7.59%), L (7.59%) |
+# | 2 | FARP2 | TF | 5.5484 | 946 | L (15.50%), E (9.00%), Q (7.50%) |
+# | 3 | TNFRSF8 | TF | 5.1460 | 56 | L (17.86%), A (14.29%), S (10.71%) |
+# 
+# ##### Feature 1664 (DUF - Domain of Unknown Function)
+# **More active in TFs** | **Difference: 2.2205**
+# 
+# | Metric | Value |
+# |--------|-------|
+# | Avg activation (TF) | 2.6407 |
+# | Avg activation (non-TF) | 0.4202 |
+# | Difference | 2.2205 |
+# 
+# **Top Activating Sequences:**
+# 
+# | Rank | Gene | Type | Activation | Length | Top AAs |
+# |------|------|------|------------|--------|---------|
+# | 1 | PTS | TF | 5.7061 | 145 | V (12.41%), K (7.59%), L (7.59%) |
+# | 2 | TMA7B | TF | 4.5625 | 65 | K (30.77%), E (12.31%), G (10.77%) |
+# | 3 | FARP2 | TF | 3.8321 | 946 | L (15.50%), E (9.00%), Q (7.50%) |
+# 
+# ##### Feature 1704 (BRCA1 - breast cancer type 1 susceptibility)
+# **More active in TFs** | **Difference: 1.9029**
+# 
+# | Metric | Value |
+# |--------|-------|
+# | Avg activation (TF) | 2.8561 |
+# | Avg activation (non-TF) | 0.9531 |
+# | Difference | 1.9029 |
+# 
+# **Top Activating Sequences:**
+# 
+# | Rank | Gene | Type | Activation | Length | Top AAs |
+# |------|------|------|------------|--------|---------|
+# | 1 | FARP2 | TF | 4.3725 | 946 | L (15.50%), E (9.00%), Q (7.50%) |
+# | 2 | TNFRSF8 | TF | 4.1999 | 56 | L (17.86%), A (14.29%), S (10.71%) |
+# | 3 | NANOS3 | TF | 3.9827 | 19 | e (21.05%), a (15.79%), u (10.53%) |
+# 
+# ##### Feature 297 (SH2 Domain)
+# **More active in TFs** | **Difference: 1.8740**
+# 
+# | Metric | Value |
+# |--------|-------|
+# | Avg activation (TF) | 3.1584 |
+# | Avg activation (non-TF) | 1.2845 |
+# | Difference | 1.8740 |
+# 
+# **Top Activating Sequences:**
+# 
+# | Rank | Gene | Type | Activation | Length | Top AAs |
+# |------|------|------|------------|--------|---------|
+# | 1 | PTS | TF | 5.3679 | 145 | V (12.41%), K (7.59%), L (7.59%) |
+# | 2 | TMA7B | TF | 5.0466 | 65 | K (30.77%), E (12.31%), G (10.77%) |
+# | 3 | TNFRSF8 | TF | 4.0315 | 56 | L (17.86%), A (14.29%), S (10.71%) |
+# 
+# ##### Feature 170 (Cytoplasmic Linker)
+# **More active in TFs** | **Difference: 1.7371**
+# 
+# | Metric | Value |
+# |--------|-------|
+# | Avg activation (TF) | 2.2395 |
+# | Avg activation (non-TF) | 0.5023 |
+# | Difference | 1.7371 |
+# 
+# **Top Activating Sequences:**
+# 
+# | Rank | Gene | Type | Activation | Length | Top AAs |
+# |------|------|------|------------|--------|---------|
+# | 1 | TNFRSF8 | TF | 3.9995 | 56 | L (17.86%), A (14.29%), S (10.71%) |
+# | 2 | NANOS3 | TF | 3.5369 | 19 | e (21.05%), a (15.79%), u (10.53%) |
+# | 3 | PTS | TF | 3.3200 | 145 | V (12.41%), K (7.59%), L (7.59%) |
 
 # %% [markdown]
 # SAE vs IG comparison (qualitative):
 # 
-#   Sample 0 (TF) — top SAE features: [ 308 1450  569 1557 1272]
+# Sample 0 (TF) — top SAE features: [ 308 1450  569 1557 1272]
 # 
-#   Sample 1 (TF) — top SAE features: [1525  308 1450 1261 1557]
+# Sample 1 (TF) — top SAE features: [1525  308 1450 1261 1557]
 # 
-#   Sample 2 (TF) — top SAE features: [ 477 1782 1250 1681 1040]
+# Sample 2 (TF) — top SAE features: [ 477 1782 1250 1681 1040]
 # 
-#   Sample 3 (TF) — top SAE features: [1450 1159  308 1664 1557]
-#   
-#   Sample 4 (TF) — top SAE features: [1837 1782  477  139  299]
+# Sample 3 (TF) — top SAE features: [1450 1159  308 1664 1557]
+# 
+# Sample 4 (TF) — top SAE features: [1837 1782  477  139  299]
 
 # %% [markdown]
-# The SAE features that activate most strongly for TFs may correspond to specific sequence patterns or structural motifs that are characteristic of transcription factors, such as DNA-binding domains (e.g., helix-turn-helix, zinc fingers). To determine if these features align with known protein domains, we could analyze the sequences that strongly activate each feature and perform motif enrichment analysis against databases like Pfam. When comparing the SAE features to the IG and attention attribution results, we might find that certain SAE features correspond to the high-attribution regions identified by IG and attention analyses, suggesting that these features capture biologically relevant information that the model uses for its predictions. However, it's also possible that some SAE features capture more abstract patterns that do not directly align with specific motifs but still contribute to the model's decision-making process.
+# Comparing SAE features to IG attributions and attention results, we observe that the top SAE features that are more active in TFs correspond to samples that also show strong IG attributions in certain sequence windows. For example, Sample 1 has a top SAE feature (1525: CXADR - cell adhesion molecule) that is highly activated and also has a strong IG attribution in the window 1-31. Additionally, the attention peak positions for these samples often align with the regions highlighted by IG, suggesting that the model is focusing on biologically relevant motifs in those sequences. However, there are some discrepancies where certain SAE features do not correspond to the highest IG attribution windows or attention peaks, which could indicate that the model is using a combination of local sequence features and more global patterns captured by the SAE. Overall, while there is some alignment between the methods, they also provide complementary insights into the model's decision-making process.
 
 # %% [markdown]
 # # References:
